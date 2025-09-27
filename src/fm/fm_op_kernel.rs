@@ -7,6 +7,7 @@
 //! - Feedback operators (self-modulation)
 
 use super::{constants::*, sin::Sin};
+use log::trace;
 
 /// Parameters for FM operator computation
 #[derive(Clone, Debug)]
@@ -117,7 +118,7 @@ impl FmOpKernel {
                 unsafe {
                     DEBUG_COUNT += 1;
                     if DEBUG_COUNT <= 5 {
-                        println!("SINE DEBUG {}: phase={}, freq={}, y={}, gain={}, y1={}, output={}",
+                        trace!("SINE DEBUG {}: phase={}, freq={}, y={}, gain={}, y1={}, output={}",
                             DEBUG_COUNT, phase, freq, y, gain, y1, output[i]);
                     }
                 }

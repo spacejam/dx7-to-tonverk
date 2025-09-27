@@ -1,6 +1,7 @@
 
 use anyhow::{anyhow, Result};
 use clap::Parser;
+use log::{debug, info, warn};
 use std::path::Path;
 
 use dx7tv::{Dx7Synth, parse_sysex_file, WavOutput};
@@ -65,29 +66,37 @@ struct Args {
 fn main() -> Result<()> {
     let args = Args::parse();
 
+    // Initialize logger
+    if args.verbose {
+        env_logger::Builder::from_default_env()
+            .filter_level(log::LevelFilter::Debug)
+            .init();
+    } else {
+        env_logger::Builder::from_default_env()
+            .filter_level(log::LevelFilter::Info)
+            .init();
+    }
+
     // Validate arguments
     validate_args(&args)?;
 
     if args.verbose {
-        println!("dx7tv - DX7 Test Vector Generator");
-        println!("SYSEX file: {}", args.sysex_file);
-        println!(
+        info!("dx7tv - DX7 Test Vector Generator");
+        info!("SYSEX file: {}", args.sysex_file);
+        info!(
             "MIDI note: {} ({})",
             args.midi_note,
             note_name(args.midi_note)
         );
-        println!("Velocity: {}", args.velocity);
-        println!("Max length: {:.2}s", args.note_length);
-        println!("Sample rate: {}Hz", args.sample_rate);
-        println!("Silence threshold: {}μs", args.silence_threshold_us);
-        println!("Output file: {}", args.output_file);
-        println!();
+        info!("Velocity: {}", args.velocity);
+        info!("Max length: {:.2}s", args.note_length);
+        info!("Sample rate: {}Hz", args.sample_rate);
+        info!("Silence threshold: {}μs", args.silence_threshold_us);
+        info!("Output file: {}", args.output_file);
     }
 
     // Load SYSEX file
-    if args.verbose {
-        println!("Loading SYSEX file...");
-    }
+    debug!("Loading SYSEX file...");
 
     let patches = parse_sysex_file(&args.sysex_file)?;
 
@@ -105,39 +114,28 @@ fn main() -> Result<()> {
 
     let patch = &patches[args.patch];
 
-    if args.verbose {
-        println!("Found {} patch(es)", patches.len());
-        println!("Using patch {}: \"{}\"", args.patch, patch.name);
-        println!();
-    }
+    info!("Found {} patch(es)", patches.len());
+    info!("Using patch {}: \"{}\"", args.patch, patch.name);
 
     // Initialize synthesizer
-    if args.verbose {
-        println!("Initializing synthesizer...");
-    }
+    debug!("Initializing synthesizer...");
 
     let mut synth = Dx7Synth::new(args.sample_rate as f64, args.note_length + 1.0);
     synth.load_patch(patch.clone())?;
 
     // Generate audio
-    if args.verbose {
-        println!("Generating audio...");
-    }
+    debug!("Generating audio...");
 
     let audio_samples = synth.render_note(args.midi_note, args.velocity, args.note_length)?;
 
-    if args.verbose {
-        println!(
-            "Generated {} samples ({:.2}s)",
-            audio_samples.len(),
-            audio_samples.len() as f64 / args.sample_rate as f64
-        );
-    }
+    debug!(
+        "Generated {} samples ({:.2}s)",
+        audio_samples.len(),
+        audio_samples.len() as f64 / args.sample_rate as f64
+    );
 
     // Write to WAV file with silence detection
-    if args.verbose {
-        println!("Writing WAV file...");
-    }
+    debug!("Writing WAV file...");
 
     let mut wav_output = WavOutput::new(
         &args.output_file,
@@ -155,31 +153,27 @@ fn main() -> Result<()> {
         total_written += chunk.len();
 
         if silence_detected {
-            if args.verbose {
-                println!(
-                    "Silence threshold reached after {} samples ({:.3}s)",
-                    total_written,
-                    total_written as f64 / args.sample_rate as f64
-                );
-            }
+            debug!(
+                "Silence threshold reached after {} samples ({:.3}s)",
+                total_written,
+                total_written as f64 / args.sample_rate as f64
+            );
             break;
         }
     }
 
     wav_output.finalize()?;
 
-    if args.verbose {
-        println!(
-            "Successfully wrote {} samples to '{}'",
-            total_written, args.output_file
-        );
+    debug!(
+        "Successfully wrote {} samples to '{}'",
+        total_written, args.output_file
+    );
 
-        if !silence_detected && total_written == audio_samples.len() {
-            println!("Note: Reached maximum length without detecting silence");
-        }
+    if !silence_detected && total_written == audio_samples.len() {
+        warn!("Reached maximum length without detecting silence");
     }
 
-    println!(
+    info!(
         "Generated test vector: {} -> {}",
         args.sysex_file, args.output_file
     );

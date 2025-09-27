@@ -7,6 +7,7 @@
 
 use super::constants::*;
 use std::sync::atomic::{AtomicU32, Ordering};
+use log::debug;
 
 static SR_MULTIPLIER: AtomicU32 = AtomicU32::new(1 << 24);
 
@@ -87,6 +88,8 @@ impl Env {
     /// * `outlevel` - Output level in microsteps
     /// * `rate_scaling` - Rate scaling amount (0-63)
     pub fn init(&mut self, rates: &[i32; 4], levels: &[i32; 4], outlevel: i32, rate_scaling: i32) {
+        debug!("ENV INIT: rates={:?}, levels={:?}, outlevel={}, rate_scaling={}",
+               rates, levels, outlevel, rate_scaling);
         self.rates = *rates;
         self.levels = *levels;
         self.outlevel = outlevel;
@@ -203,12 +206,17 @@ impl Env {
         if self.ix < 4 {
             let newlevel = self.levels[self.ix as usize];
             let mut actuallevel = Self::scale_outlevel(newlevel) >> 1;
+            debug!("ENV ADVANCE: ix={}, newlevel={}, scaled_outlevel={}, outlevel={}",
+                   self.ix, newlevel, actuallevel, self.outlevel);
             actuallevel = (actuallevel << 6) + self.outlevel - 4256;
+            debug!("ENV ADVANCE: actuallevel after formula = {}", actuallevel);
 
-
+            // Clamp actuallevel to reasonable range (C++ only has lower bound)
             actuallevel = if actuallevel < 16 { 16 } else { actuallevel };
+            debug!("ENV ADVANCE: actuallevel after clamp = {} (DANGEROUS - no upper bound)", actuallevel);
 
             self.targetlevel = actuallevel << 16;
+            debug!("ENV ADVANCE: targetlevel = {}", self.targetlevel);
             self.rising = self.targetlevel > self.level;
 
             // Calculate rate

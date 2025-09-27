@@ -284,17 +284,17 @@ impl FmOperator {
         unsafe {
             GAIN_DEBUG_COUNT += 1;
             if GAIN_DEBUG_COUNT <= 3 {
-                println!("DEBUG GAIN: env_level={}, exp2_input={}, gain={}",
+                debug!("GAIN: env_level={}, exp2_input={}, gain={}",
                     env_level, exp2_input, gain);
             }
         }
 
         if gain < 1120 {  // C++ kLevelThresh = 1120
-            println!("DEBUG: Gain {} below threshold (kLevelThresh=1120), filling with zeros", gain);
+            trace!("Gain {} below threshold (kLevelThresh=1120), filling with zeros", gain);
             output.fill(0);
             return;
         } else {
-            println!("DEBUG: Gain {} passes threshold, generating audio", gain);
+            trace!("Gain {} passes threshold, generating audio", gain);
         }
 
 
@@ -312,7 +312,7 @@ impl FmOperator {
             }
             (None, None) => {
                 // Pure sine wave (carrier)
-                println!("DEBUG SINE: phase={}, freq={}, gain={}", self.phase, self.freq, gain);
+                trace!("SINE: phase={}, freq={}, gain={}", self.phase, self.freq, gain);
                 FmOpKernel::compute_pure(output, self.phase, self.freq, gain, gain, false);
 
                 // Debug: Check what was actually produced
@@ -320,7 +320,7 @@ impl FmOperator {
                 unsafe {
                     SINE_DEBUG_COUNT += 1;
                     if SINE_DEBUG_COUNT <= 2 {
-                        println!("DEBUG SINE OUTPUT: {:?}", &output[0..5]);
+                        trace!("SINE OUTPUT: {:?}", &output[0..5]);
                     }
                 }
             }
@@ -647,22 +647,48 @@ impl Dx7Note {
                 // Apply exact C++ envelope scaling logic (from dx7note.cc:174-184)
                 let mut outlevel = output_level;
 
-                // Step 1: Scale output level
-                outlevel = scale_out_level(outlevel);
+                if i == 0 {  // Only debug OP0 to reduce noise
+                    debug!("OP{}: Raw sysex output_level = {} (from patch data)", i, patch_data[op_offset + 16]);
+                    debug!("OP{}: Initial output_level = {}", i, outlevel);
 
-                // Step 2: Add keyboard level scaling
-                let level_scaling = scale_level(self.note as i32, key_break_point,
-                                              key_left_depth, key_right_depth,
-                                              key_left_curve, key_right_curve);
-                outlevel += level_scaling;
-                outlevel = outlevel.min(127);
+                    // Step 1: Scale output level
+                    outlevel = scale_out_level(outlevel);
+                    debug!("OP{}: After scale_out_level = {}", i, outlevel);
 
-                // Step 3: Shift left by 5 bits
-                outlevel = outlevel << 5;
+                    // Step 2: Add keyboard level scaling
+                    let level_scaling = scale_level(self.note as i32, key_break_point,
+                                                  key_left_depth, key_right_depth,
+                                                  key_left_curve, key_right_curve);
+                    debug!("OP{}: level_scaling = {}", i, level_scaling);
+                    outlevel += level_scaling;
+                    outlevel = outlevel.min(127);
+                    debug!("OP{}: After level_scaling+clamp = {}", i, outlevel);
 
-                // Step 4: Add velocity scaling
-                outlevel += scale_velocity(self.velocity as i32, velocity_sens);
-                outlevel = outlevel.max(0);
+                    // Step 3: Shift left by 5 bits
+                    outlevel = outlevel << 5;
+                    debug!("OP{}: After <<5 = {}", i, outlevel);
+
+                    // Step 4: Add velocity scaling
+                    let vel_scaling = scale_velocity(self.velocity as i32, velocity_sens);
+                    debug!("OP{}: velocity_scaling = {}", i, vel_scaling);
+                    outlevel += vel_scaling;
+                    outlevel = outlevel.max(0);
+                    debug!("OP{}: Final outlevel = {}", i, outlevel);
+                } else {
+                    // Non-debug path for other operators
+                    outlevel = scale_out_level(outlevel);
+                    let level_scaling = scale_level(self.note as i32, key_break_point,
+                                                  key_left_depth, key_right_depth,
+                                                  key_left_curve, key_right_curve);
+                    outlevel += level_scaling;
+                    outlevel = outlevel.min(127);
+                    outlevel = outlevel << 5;
+                    outlevel += scale_velocity(self.velocity as i32, velocity_sens);
+                    outlevel = outlevel.max(0);
+                }
+
+                // Debug output (disabled for production)
+                // eprintln!("CRITICAL: OP{} outlevel = {}", i, outlevel);
 
                 // Check if outlevel is too low for synthesis (commented out for production)
                 // if outlevel < 100 {

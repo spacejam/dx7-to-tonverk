@@ -93,7 +93,9 @@ impl Dx7Synth {
                 if samples_generated + i >= max_samples {
                     break;
                 }
-                let f32_sample = sample as f32 / (1i32 << 23) as f32;
+                // Convert i32 to f32 for direct WAV output (no VST processing)
+                // Use scaling appropriate for the integer sample values we're getting
+                let f32_sample = sample as f32 / 32768.0; // Scale to reasonable audio range
                 f32_block[i] = f32_sample;
 
                 // Debug: show first few samples for debugging
@@ -123,7 +125,7 @@ impl Dx7Synth {
                     break;
                 }
 
-                let f32_sample = sample as f32 / (1i32 << 23) as f32;
+                let f32_sample = sample as f32 / (1i32 << 17) as f32;
                 f32_block[i] = f32_sample;
 
                 // Check for silence
