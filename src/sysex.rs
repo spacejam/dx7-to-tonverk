@@ -150,16 +150,25 @@ impl Dx7Patch {
             data[base + 8] = op_params.level_scaling_bp;
             data[base + 9] = op_params.level_scaling_ld;
             data[base + 10] = op_params.level_scaling_rd;
-            data[base + 11] = op_params.level_scaling_lc;
-            data[base + 12] = op_params.level_scaling_rc;
-            data[base + 13] = op_params.rate_scaling;
-            data[base + 14] = op_params.amp_mod_sens;
-            data[base + 15] = op_params.velocity_sens;
+
+            // Pack left/right curves into byte 11 (DX7 format)
+            let curve_settings = (op_params.level_scaling_lc & 0x03) | ((op_params.level_scaling_rc & 0x03) << 2);
+            data[base + 11] = curve_settings;
+
+            // Pack detune and rate scaling into byte 12 (DX7 format)
+            let detune_rs = ((op_params.detune & 0x7F) << 3) | (op_params.rate_scaling & 0x07);
+            data[base + 12] = detune_rs;
+
+            // Byte 13 is used for vel_amp_sens in DX7 format (parsed as kvs_ams)
+            let vel_amp_sens = ((op_params.velocity_sens & 0x07) << 2) | (op_params.amp_mod_sens & 0x03);
+            data[base + 13] = vel_amp_sens;
+
+            // Pack oscillator mode and coarse frequency into byte 15 (DX7 format)
+            let fcoarse_mode = (op_params.osc_mode & 0x01) | ((op_params.coarse_freq & 0x1F) << 1);
+            data[base + 15] = fcoarse_mode;
+
             data[base + 16] = op_params.output_level;
-            data[base + 17] = op_params.osc_mode;
-            data[base + 18] = op_params.coarse_freq;
             data[base + 19] = op_params.fine_freq;
-            data[base + 20] = op_params.detune;
         }
 
         // Update global data
