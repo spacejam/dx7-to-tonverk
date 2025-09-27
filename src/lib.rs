@@ -33,7 +33,7 @@ pub mod fm {
     pub use env::Env;
     pub use lfo::Lfo;
     pub use controllers::Controllers;
-    pub use freqlut::FreqLut;
+    pub use freqlut::Freqlut;
 }
 
 // Application modules

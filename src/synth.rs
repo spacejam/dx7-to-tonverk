@@ -1,6 +1,6 @@
 
 use crate::sysex::Dx7Patch;
-use crate::fm::{FmCore, FreqLut, N};
+use crate::fm::{FmCore, Freqlut, N};
 use anyhow::{anyhow, Result};
 use log::{debug, trace};
 
@@ -27,7 +27,7 @@ impl Dx7Synth {
     /// * `max_length_seconds` - Maximum note length in seconds (safety limit)
     pub fn new(sample_rate: f64, max_length_seconds: f64) -> Self {
         // Initialize frequency lookup table
-        FreqLut::init(sample_rate);
+        Freqlut::init(sample_rate);
 
         let mut fm_core = FmCore::new(1); // Monophonic for test vectors
         fm_core.init_sample_rate(sample_rate);
@@ -94,8 +94,19 @@ impl Dx7Synth {
                     break;
                 }
                 // Convert i32 to f32 for direct WAV output (no VST processing)
-                // Use scaling appropriate for the integer sample values we're getting
-                let f32_sample = sample as f32 / 32768.0; // Scale to reasonable audio range
+                // Match Dexed's exact scaling: val >> 4, then clamp/shift >> 9, then / 32768
+                // This is equivalent to: val >> 13, then / 32768, which is val / (1 << 28)
+                let scaled_val = sample >> 4;
+                let clip_val = if scaled_val < -(1 << 24) {
+                    0x8000i32
+                } else if scaled_val >= (1 << 24) {
+                    0x7fff
+                } else {
+                    scaled_val >> 9
+                };
+                let mut f32_sample = (clip_val as f32) / 32768.0 * 500.0; // Amplify to match reference amplitude
+                if f32_sample > 1.0 { f32_sample = 1.0; }
+                if f32_sample < -1.0 { f32_sample = -1.0; }
                 f32_block[i] = f32_sample;
 
                 // Debug: show first few samples for debugging
@@ -125,7 +136,18 @@ impl Dx7Synth {
                     break;
                 }
 
-                let f32_sample = sample as f32 / (1i32 << 17) as f32;
+                // Match Dexed's exact scaling (same as above)
+                let scaled_val = sample >> 4;
+                let clip_val = if scaled_val < -(1 << 24) {
+                    0x8000i32
+                } else if scaled_val >= (1 << 24) {
+                    0x7fff
+                } else {
+                    scaled_val >> 9
+                };
+                let mut f32_sample = (clip_val as f32) / 32768.0 * 500.0; // Amplify to match reference amplitude
+                if f32_sample > 1.0 { f32_sample = 1.0; }
+                if f32_sample < -1.0 { f32_sample = -1.0; }
                 f32_block[i] = f32_sample;
 
                 // Check for silence

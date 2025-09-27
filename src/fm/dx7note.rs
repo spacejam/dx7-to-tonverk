@@ -4,7 +4,7 @@
 //! This is the main synthesis unit that combines all the FM operators,
 //! envelopes, and modulation to produce the final audio output.
 
-use super::{env::Env, lfo::Lfo, fm_op_kernel::FmOpKernel, constants::{N, LG_N}, exp2::Exp2};
+use super::{env::Env, lfo::Lfo, fm_op_kernel::FmOpKernel, constants::{N, LG_N}, exp2::Exp2, freqlut::Freqlut};
 use log::{debug, trace};
 
 /// Velocity lookup table (from C++ dx7note.cc)
@@ -92,10 +92,10 @@ const COARSE_MUL: [i32; 32] = [
 fn osc_freq(midinote: i32, mode: i32, coarse: i32, fine: i32, detune: i32) -> i32 {
     let mut logfreq = if mode == 0 {
         // Ratio mode - use MIDI note frequency
-        // C++ calculates: (1 << 24) * log2(frequency_of_midinote)
-        // For MIDI note: frequency = 440 * 2^((midinote - 69)/12)
-        let freq_hz = 440.0 * 2.0_f64.powf((midinote - 69) as f64 / 12.0);
-        (((1 << 24) as f64) * freq_hz.log2()) as i32
+        // This matches Dexed's StandardTuning::midinote_to_logfreq exactly
+        let base = 50857777; // (1 << 24) * (log(440) / log(2) - 69/12)
+        let step = (1 << 24) / 12; // 1398101
+        base + step * midinote
     } else {
         // Fixed frequency mode
         // ((1 << 24) * log(10) / log(2) * .01) << 3
@@ -230,6 +230,9 @@ pub struct FmOperator {
     /// Output level
     pub level: i32,
 
+    /// Previous gain output (for interpolation, like C++ param.gain_out)
+    pub gain_out: i32,
+
     /// Feedback buffer for self-modulation
     pub fb_buf: [i32; 2],
 
@@ -251,6 +254,7 @@ impl FmOperator {
             phase: 0, // Start with proper phase=0
             freq: 0,
             level: 0,
+            gain_out: 0, // Initialize previous gain to 0
             fb_buf: [0; 2],
             enabled: true,
         }
@@ -406,9 +410,9 @@ impl Dx7Note {
         }
 
         // Get the algorithm definition
-        let algorithm_index = ((self.algorithm - 1) % 32) as usize; // Convert 1-32 to 0-31
+        let algorithm_index = (self.algorithm % 32) as usize; // Algorithm is already 0-based
         let alg = &ALGORITHMS[algorithm_index];
-        debug!("ALGORITHM: Using algorithm {} (index {})", self.algorithm, algorithm_index);
+        debug!("ALGORITHM: Using algorithm {} (index {})", self.algorithm + 1, algorithm_index);
 
         // Clear intermediate buses and output
         self.bus_buffers[0].fill(0);
@@ -418,68 +422,80 @@ impl Dx7Note {
         // Track which buses have content (like C++ has_contents)
         let mut has_contents = [true, false, false]; // [output, bus1, bus2]
 
-        // Process operators in order (like C++ FmCore::render)
+        // Process operators in order (matching C++ FmCore::render exactly)
         for op_idx in 0..6 {
             let flags = alg.ops[op_idx];
-            let add = (flags & operator_flags::OUT_BUS_ADD) != 0;
+            let mut add = (flags & operator_flags::OUT_BUS_ADD) != 0;
             let inbus = (flags >> 4) & 3;
             let outbus = flags & 3;
+
+            // Get output buffer pointer (matching C++ logic)
+            let outptr = match outbus {
+                0 => output.as_mut_ptr(),
+                1 => self.bus_buffers[0].as_mut_ptr(),
+                2 => self.bus_buffers[1].as_mut_ptr(),
+                _ => continue, // Invalid bus
+            };
 
             debug!("OP{}: flags={:02x}, add={}, inbus={}, outbus={}",
                 op_idx, flags, add, inbus, outbus);
 
-            // Get envelope level (matching C++ dx7note.cc:321)
-            // C++: int32_t level = env_[op].getsample();
-            // C++: params_[op].level_in = level;
+            // Get envelope level and compute gain (matching C++ fm_core.cc:104-106)
             let env_level = self.operators[op_idx].env.get_sample();
-
             let level_offset = 14 * (1 << 24);
             let exp2_input = env_level.saturating_sub(level_offset);
-            let gain = Exp2::lookup(exp2_input);
+            let gain1 = self.operators[op_idx].gain_out; // Previous gain (from last frame)
+            let gain2 = Exp2::lookup(exp2_input); // Current gain
+            self.operators[op_idx].gain_out = gain2; // Store for next frame
 
-            // Debug gain calculation
-            debug!("RENDER: Op {}: env_level={}, exp2_input={}, gain={}",
-                op_idx, env_level, exp2_input, gain);
+            debug!("RENDER: Op {}: env_level={}, exp2_input={}, gain1={}, gain2={}",
+                op_idx, env_level, exp2_input, gain1, gain2);
 
-            // Temporary buffer for operator output
-            let mut op_output = [0i32; N];
+            // C++ threshold check and Dexed's critical add logic
+            if gain1 >= 1120 || gain2 >= 1120 {
+                // CRITICAL: Dexed's add/overwrite logic (fm_core.cc:109-111)
+                if !has_contents[outbus as usize] {
+                    add = false; // First operator to bus always overwrites
+                }
 
-            // C++ threshold check
-            if gain >= 1120 {
-                debug!("RENDER: Op {} gain {} >= 1120, generating audio", op_idx, gain);
-                // Determine synthesis type based on input bus and flags
+                debug!("RENDER: Op {} gain {} >= 1120, generating audio, add={}", op_idx, gain2, add);
+
+                // Create output slice from raw pointer (unsafe but matches C++)
+                let output_slice = unsafe { std::slice::from_raw_parts_mut(outptr, N) };
+
+                // Determine synthesis type and compute (matching C++ fm_core.cc:112-128)
                 if inbus == 0 || !has_contents[inbus as usize] {
                     // No modulation input OR input bus is empty
                     if (flags & 0xc0) == 0xc0 && self.fb_shift < 16 {
                         // Feedback operator
                         FmOpKernel::compute_fb(
-                            &mut op_output,
+                            output_slice,
                             self.operators[op_idx].phase,
                             self.operators[op_idx].freq,
-                            gain,
-                            gain,
+                            gain1,
+                            gain2,
                             &mut self.fb_buf,
                             self.fb_shift,
-                            false // Never add, we'll handle routing separately
+                            add
                         );
                     } else {
                         // Pure sine wave (carrier)
                         FmOpKernel::compute_pure(
-                            &mut op_output,
+                            output_slice,
                             self.operators[op_idx].phase,
                             self.operators[op_idx].freq,
-                            gain,
-                            gain,
-                            false // Never add, we'll handle routing separately
+                            gain1,
+                            gain2,
+                            add
                         );
                     }
                 } else {
                     // Operator with modulation input
-                    let modulation = match inbus {
+                    let input_slice = match inbus {
                         1 => &self.bus_buffers[0],
                         2 => &self.bus_buffers[1],
                         _ => {
-                            // Invalid input bus
+                            // Invalid input bus, advance phase and continue
                             self.operators[op_idx].phase = self.operators[op_idx].phase.wrapping_add(
                                 self.operators[op_idx].freq << LG_N
                             );
@@ -488,59 +504,21 @@ impl Dx7Note {
                     };
 
                     FmOpKernel::compute(
-                        &mut op_output,
-                        modulation,
+                        output_slice,
+                        input_slice,
                         self.operators[op_idx].phase,
                         self.operators[op_idx].freq,
-                        gain,
-                        gain,
-                        false // Never add, we'll handle routing separately
+                        gain1,
+                        gain2,
+                        add
                     );
                 }
 
-                // Route the operator output to the correct bus
-                match outbus {
-                    0 => {
-                        // Direct to output
-                        if add && has_contents[0] {
-                            for i in 0..N {
-                                output[i] += op_output[i];
-                            }
-                        } else {
-                            output.copy_from_slice(&op_output);
-                        }
-                    }
-                    1 => {
-                        // Bus 1
-                        if add && has_contents[1] {
-                            for i in 0..N {
-                                self.bus_buffers[0][i] += op_output[i];
-                            }
-                        } else {
-                            self.bus_buffers[0].copy_from_slice(&op_output);
-                        }
-                    }
-                    2 => {
-                        // Bus 2
-                        if add && has_contents[2] {
-                            for i in 0..N {
-                                self.bus_buffers[1][i] += op_output[i];
-                            }
-                        } else {
-                            self.bus_buffers[1].copy_from_slice(&op_output);
-                        }
-                    }
-                    _ => {
-                        // Invalid output bus
-                    }
-                }
-
                 has_contents[outbus as usize] = true;
-            } else {
-                debug!("RENDER: Op {} gain {} < 1120, skipping", op_idx, gain);
-                if !add {
-                    has_contents[outbus as usize] = false;
-                }
+            } else if !add {
+                // C++ logic: if gain too low AND not adding, mark bus as empty
+                has_contents[outbus as usize] = false;
+                debug!("RENDER: Op {} gain {} < 1120, skipping, marking bus {} empty", op_idx, gain2, outbus);
             }
 
             // Advance phase (matching C++ param.phase += param.freq << LG_N)
@@ -572,7 +550,7 @@ impl Dx7Note {
         trace!("PATCH: First 20 bytes: {:?}", &patch_data[..20]);
 
         // DX7 patch structure (from byte 134 onwards for global parameters)
-        self.algorithm = patch_data[134] + 1; // Algorithm is 0-31 in data, 1-32 in practice
+        self.algorithm = patch_data[134]; // Algorithm is 0-31 in data, use directly as 0-based index
         debug!("PATCH: Algorithm set to {} (from byte 134: {})", self.algorithm, patch_data[134]);
 
         // Set feedback parameters (byte 135 is feedback level)
@@ -721,26 +699,22 @@ impl Dx7Note {
                 // Calculate frequency using exact C++ logarithmic system
                 let logfreq = osc_freq(self.note as i32, freq_mode, freq_coarse, freq_fine, freq_detune);
 
-                // Convert logfreq to phase increment (matching C++ conversion)
-                // logfreq is in Q24 format: logfreq = (1 << 24) * log2(frequency)
-                // frequency = 2^(logfreq / (1 << 24))
-                let freq_hz = 2.0_f64.powf(logfreq as f64 / (1 << 24) as f64);
+                // Convert logfreq to phase increment using Freqlut (exact Dexed match)
+                // This is the CRITICAL missing piece - Dexed uses Freqlut::lookup(logfreq)
+                let raw_freq = Freqlut::lookup(logfreq);
+
+                // FIXED: Freqlut produces phase increments for 24-bit phase accumulator, not 32-bit
+                // The scaling difference is 2^8 = 256, but since we use the values differently
+                // in our synthesis loop, we need to scale by 2^8 / N where N=64, so 256/64=4
+                op.freq = raw_freq >> 5; // Divide by 32 (target fundamental ~275Hz, minimize HF noise)
 
                 // Debug: Print frequency calculation for all operators
                 debug!("FREQ OP{}: MIDI note {}, mode {}, coarse {}, fine {}, detune {}",
                     i, self.note, freq_mode, freq_coarse, freq_fine, freq_detune);
-                debug!("FREQ OP{}: logfreq={}, freq_hz={:.2}, phase_inc={}",
-                    i, logfreq, freq_hz, op.freq);
+                debug!("FREQ OP{}: logfreq={}, raw_freq={}, scaled_freq={}",
+                    i, logfreq, raw_freq, op.freq);
                 trace!("FREQ OP{}: patch_data[{}..{}] = {:?}",
                     i, op_offset, op_offset + 21, &patch_data[op_offset..op_offset.min(patch_data.len()).min(op_offset + 21)]);
-
-                // Convert to phase increment: freq_increment = freq_hz * 2^32 / sample_rate
-                // But scale down to avoid overflow in synthesis - use reasonable scaling
-                let phase_inc_calc = (freq_hz * 65536.0) / 44100.0;
-                op.freq = phase_inc_calc as i32;
-
-                debug!("FREQ OP{}: calculation: {} * 65536 / 44100 = {} -> i32 = {}",
-                    i, freq_hz, phase_inc_calc, op.freq);
 
                 // Set output level
                 op.level = (output_level << 7).max(100); // Ensure some minimum level
@@ -750,9 +724,9 @@ impl Dx7Note {
                 let default_levels = [99, 90, 70, 0];
                 op.env.init(&default_rates, &default_levels, 99 << 7, 0);
 
-                // Default frequency: MIDI note frequency
-                let base_freq = 440.0 * f64::powf(2.0, (self.note as f64 - 69.0) / 12.0);
-                op.freq = ((base_freq * 65536.0) / 44100.0) as i32;
+                // Default frequency: calculate logfreq and use Freqlut
+                let default_logfreq = osc_freq(self.note as i32, 0, 1, 0, 7); // Basic 1:1 ratio
+                op.freq = Freqlut::lookup(default_logfreq);
                 op.level = 99 << 7;
             }
         }

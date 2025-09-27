@@ -55,18 +55,18 @@ impl FmOpKernel {
         if add {
             for i in 0..N {
                 gain += dgain;
-                let y = Sin::lookup(phase + input[i]);
+                let y = Sin::lookup(phase.wrapping_add(input[i]));
                 let y1 = ((y as i64) * (gain as i64)) >> 24;
                 output[i] += y1 as i32;
-                phase += freq;
+                phase = phase.wrapping_add(freq);
             }
         } else {
             for i in 0..N {
                 gain += dgain;
-                let y = Sin::lookup(phase + input[i]);
+                let y = Sin::lookup(phase.wrapping_add(input[i]));
                 let y1 = ((y as i64) * (gain as i64)) >> 24;
                 output[i] = y1 as i32;
-                phase += freq;
+                phase = phase.wrapping_add(freq);
             }
         }
     }
@@ -104,7 +104,7 @@ impl FmOpKernel {
                 let y = Sin::lookup(phase);
                 let y1 = ((y as i64) * (gain as i64)) >> 24;
                 output[i] += y1 as i32;
-                phase += freq;
+                phase = phase.wrapping_add(freq);
             }
         } else {
             for i in 0..N {
@@ -124,7 +124,7 @@ impl FmOpKernel {
                 }
 
 
-                phase += freq;
+                phase = phase.wrapping_add(freq);
             }
         }
     }
@@ -166,23 +166,23 @@ impl FmOpKernel {
             for i in 0..N {
                 gain += dgain;
                 let shift_amount = (fb_shift + 1).min(31); // Clamp to prevent overflow
-                let scaled_fb = (y0 + y) >> shift_amount;
+                let scaled_fb = (y0.wrapping_add(y)) >> shift_amount;
                 y0 = y;
-                y = Sin::lookup(phase + scaled_fb);
+                y = Sin::lookup(phase.wrapping_add(scaled_fb));
                 y = (((y as i64) * (gain as i64)) >> 24) as i32;
                 output[i] += y as i32;
-                phase += freq;
+                phase = phase.wrapping_add(freq);
             }
         } else {
             for i in 0..N {
                 gain += dgain;
                 let shift_amount = (fb_shift + 1).min(31); // Clamp to prevent overflow
-                let scaled_fb = (y0 + y) >> shift_amount;
+                let scaled_fb = (y0.wrapping_add(y)) >> shift_amount;
                 y0 = y;
-                y = Sin::lookup(phase + scaled_fb);
+                y = Sin::lookup(phase.wrapping_add(scaled_fb));
                 y = (((y as i64) * (gain as i64)) >> 24) as i32;
                 output[i] = y as i32;
-                phase += freq;
+                phase = phase.wrapping_add(freq);
             }
         }
 
