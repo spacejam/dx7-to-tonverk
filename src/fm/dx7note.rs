@@ -703,10 +703,12 @@ impl Dx7Note {
                 // This is the CRITICAL missing piece - Dexed uses Freqlut::lookup(logfreq)
                 let raw_freq = Freqlut::lookup(logfreq);
 
-                // FIXED: Freqlut produces phase increments for 24-bit phase accumulator, not 32-bit
-                // The scaling difference is 2^8 = 256, but since we use the values differently
-                // in our synthesis loop, we need to scale by 2^8 / N where N=64, so 256/64=4
-                op.freq = raw_freq >> 5; // Divide by 32 (target fundamental ~275Hz, minimize HF noise)
+                // DEBUG: Check what Freqlut is producing
+                println!("DEBUG FREQ: Op{} logfreq={}, raw_freq={}, raw_freq>>5={}", i, logfreq, raw_freq, raw_freq >> 5);
+
+                // REVERT: Back to when DC offset was first fixed - use raw_freq directly
+                // This gave the cleanest audio before phase advancement complications
+                op.freq = raw_freq;
 
                 // Debug: Print frequency calculation for all operators
                 debug!("FREQ OP{}: MIDI note {}, mode {}, coarse {}, fine {}, detune {}",
