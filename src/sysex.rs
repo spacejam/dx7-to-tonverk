@@ -53,9 +53,11 @@ impl Dx7Patch {
             .to_string();
 
         // Parse operators
+        // DX7 sysex stores operators in REVERSE ORDER: 6,5,4,3,2,1
         let mut operators = [OperatorParams::default(); 6];
         for op in 0..6 {
-            let base = op * 21;
+            let sysex_op = 5 - op;  // Reverse mapping for sysex
+            let base = sysex_op * 21;
             operators[op] = OperatorParams {
                 rates: Eg {
                     attack: voice_data[base + 0],   // R1

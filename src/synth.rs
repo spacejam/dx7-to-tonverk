@@ -1,6 +1,5 @@
-
-use crate::sysex::Dx7Patch;
 use crate::fm::{FmCore, Freqlut, N};
+use crate::sysex::Dx7Patch;
 use anyhow::{anyhow, Result};
 use log::{debug, trace};
 
@@ -10,7 +9,7 @@ pub struct Dx7Synth {
     fm_core: FmCore,
 
     /// Current patch loaded
-    current_patch: Option<Dx7Patch>,
+    patch: Dx7Patch,
 
     /// Sample rate
     sample_rate: f64,
@@ -20,7 +19,7 @@ pub struct Dx7Synth {
 }
 
 impl Dx7Synth {
-    /// Create a new DX7 synthesizer
+    /// Create a new DX7 synthesizer with a default patch
     ///
     /// # Arguments
     /// * `sample_rate` - Audio sample rate in Hz
@@ -32,20 +31,27 @@ impl Dx7Synth {
         let mut fm_core = FmCore::new(1); // Monophonic for test vectors
         fm_core.init_sample_rate(sample_rate);
 
+        // Create default patch
+        let default_patch = Dx7Patch::new("INIT VOICE");
+
         Self {
             fm_core,
-            current_patch: None,
+            patch: default_patch,
             sample_rate,
             max_length_samples: (sample_rate * max_length_seconds) as usize,
         }
     }
 
-    /// Load a DX7 patch
-    pub fn load_patch(&mut self, patch: Dx7Patch) -> Result<()> {
-        // Apply patch parameters to the synthesis engine
-        self.apply_patch_to_core(&patch)?;
-        self.current_patch = Some(patch);
-        Ok(())
+    /// Create a new DX7 synthesizer with the specified patch
+    ///
+    /// # Arguments
+    /// * `patch` - DX7 patch to load
+    /// * `sample_rate` - Audio sample rate in Hz
+    /// * `max_length_seconds` - Maximum note length in seconds (safety limit)
+    pub fn with_patch(patch: Dx7Patch, sample_rate: f64, max_length_seconds: f64) -> Result<Self> {
+        let mut synth = Self::new(sample_rate, max_length_seconds);
+        synth.load_patch(patch)?;
+        Ok(synth)
     }
 
     /// Generate a note and return audio samples
@@ -57,11 +63,12 @@ impl Dx7Synth {
     ///
     /// # Returns
     /// Vector of audio samples (mono, f32)
-    pub fn render_note(&mut self, midi_note: u8, velocity: u8, note_length_seconds: f64) -> Result<Vec<f32>> {
-        if self.current_patch.is_none() {
-            return Err(anyhow!("No patch loaded"));
-        }
-
+    pub fn render_note(
+        &mut self,
+        midi_note: u8,
+        velocity: u8,
+        note_length_seconds: f64,
+    ) -> Result<Vec<f32>> {
         if midi_note > 127 {
             return Err(anyhow!("Invalid MIDI note: {}", midi_note));
         }
@@ -71,8 +78,8 @@ impl Dx7Synth {
         }
 
         // Calculate maximum samples to generate
-        let max_samples = ((note_length_seconds * self.sample_rate) as usize)
-            .min(self.max_length_samples);
+        let max_samples =
+            ((note_length_seconds * self.sample_rate) as usize).min(self.max_length_samples);
 
         let mut output_samples = Vec::with_capacity(max_samples);
         let mut audio_block = [0i32; N];
@@ -86,7 +93,6 @@ impl Dx7Synth {
         while samples_generated < max_samples {
             // Process a block of audio
             self.fm_core.process(&mut audio_block);
-
 
             // Convert i32 samples to f32
             for (i, &sample) in audio_block.iter().enumerate() {
@@ -105,13 +111,16 @@ impl Dx7Synth {
                     scaled_val >> 9
                 };
                 let mut f32_sample = (clip_val as f32) / 32768.0 * 500.0; // Amplify to match reference amplitude
-                if f32_sample > 1.0 { f32_sample = 1.0; }
-                if f32_sample < -1.0 { f32_sample = -1.0; }
+                if f32_sample > 1.0 {
+                    f32_sample = 1.0;
+                }
+                if f32_sample < -1.0 {
+                    f32_sample = -1.0;
+                }
                 f32_block[i] = f32_sample;
 
-                // Debug: show first few samples for debugging
-                if samples_generated + i < 8 {
-                    log::debug!("RENDER: Sample {}: i32={}, f32={}", samples_generated + i, sample, f32_sample);
+                if samples_generated + i < 3 {
+                    log::trace!("RENDER: Sample {}: i32={}, f32={}", samples_generated + i, sample, f32_sample);
                 }
             }
 
@@ -146,11 +155,15 @@ impl Dx7Synth {
                     scaled_val >> 9
                 };
                 let mut f32_sample = (clip_val as f32) / 32768.0 * 500.0; // Amplify to match reference amplitude
-                if f32_sample > 1.0 { f32_sample = 1.0; }
-                if f32_sample < -1.0 { f32_sample = -1.0; }
+                if f32_sample > 1.0 {
+                    f32_sample = 1.0;
+                }
+                if f32_sample < -1.0 {
+                    f32_sample = -1.0;
+                }
                 f32_block[i] = f32_sample;
 
-                // Check for silence
+                // Track silence for early termination
                 if f32_sample.abs() > 1e-6 {
                     block_has_audio = true;
                     silence_count = 0;
@@ -196,14 +209,27 @@ impl Dx7Synth {
         Ok(output_samples)
     }
 
+    /// Load a new patch into the synthesizer
+    pub fn load_patch(&mut self, patch: Dx7Patch) -> Result<()> {
+        self.patch = patch;
+        self.apply_patch_to_core(&self.patch.clone())
+    }
+
     /// Apply patch parameters to the FM core
     fn apply_patch_to_core(&mut self, patch: &Dx7Patch) -> Result<()> {
         let global = patch.get_global();
 
-        // Debug: Print patch data info
+        // Load patch data
         let patch_data = patch.to_data();
-        debug!("SYNTH: Loading patch '{}', data length: {}", patch.name, patch_data.len());
-        trace!("SYNTH: First 20 bytes: {:?}", &patch_data[..20.min(patch_data.len())]);
+        debug!(
+            "SYNTH: Loading patch '{}', data length: {}",
+            patch.name,
+            patch_data.len()
+        );
+        trace!(
+            "SYNTH: First 20 bytes: {:?}",
+            &patch_data[..20.min(patch_data.len())]
+        );
         debug!("SYNTH: Algorithm: {}", patch.global.algorithm);
 
         // Set up LFO parameters
@@ -228,7 +254,7 @@ impl Dx7Synth {
 
     /// Get the current patch name
     pub fn current_patch_name(&self) -> Option<&str> {
-        self.current_patch.as_ref().map(|p| p.name.as_str())
+        Some(self.patch.name.as_str())
     }
 
     /// Get sample rate
@@ -332,10 +358,10 @@ mod tests {
         patch.operators[0].levels.decay1 = 90;
         patch.operators[0].levels.decay2 = 80;
         patch.operators[0].levels.release = 0;
-        patch.operators[0].output_level = 80;             // Output level
-        patch.operators[0].coarse_freq = 1;               // 1:1 frequency ratio
-        patch.operators[0].fine_freq = 0;                 // No fine tuning
-        patch.operators[0].detune = 7;                    // Center detune
+        patch.operators[0].output_level = 80; // Output level
+        patch.operators[0].coarse_freq = 1; // 1:1 frequency ratio
+        patch.operators[0].fine_freq = 0; // No fine tuning
+        patch.operators[0].detune = 7; // Center detune
 
         synth.load_patch(patch).unwrap();
 
@@ -346,7 +372,7 @@ mod tests {
         assert!(!samples.is_empty());
         assert!(samples.len() <= 441); // 10ms at 44.1kHz
 
-        // Check that samples are in valid range
+        // Validate sample range
         for &sample in &samples {
             assert!(sample >= -1.0 && sample <= 1.0);
             assert!(sample.is_finite());

@@ -1,7 +1,6 @@
 
 use anyhow::{anyhow, Result};
 use hound::{WavSpec, WavWriter};
-use std::i16;
 
 /// WAV file writer with silence detection
 pub struct WavOutput {
@@ -23,7 +22,7 @@ impl WavOutput {
         let spec = WavSpec {
             channels: 1,           // Mono output
             sample_rate,
-            bits_per_sample: 16,   // 16-bit PCM
+            bits_per_sample: 24,   // 24-bit PCM
             sample_format: hound::SampleFormat::Int,
         };
 
@@ -50,10 +49,10 @@ impl WavOutput {
             .ok_or_else(|| anyhow!("WAV writer is closed"))?;
 
         for &sample in samples {
-            // Convert float sample to 16-bit PCM
+            // Convert float sample to 24-bit PCM
             let pcm_sample = if sample.is_finite() {
                 let clamped = sample.clamp(-1.0, 1.0);
-                (clamped * 32767.0) as i16
+                (clamped * 8388607.0) as i32  // 2^23 - 1 for 24-bit
             } else {
                 0
             };

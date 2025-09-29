@@ -97,7 +97,7 @@ impl FmCore {
 
         // Process each active voice
         let mut active_voices = 0;
-        for (i, voice) in self.voices.iter_mut().enumerate() {
+        for (_i, voice) in self.voices.iter_mut().enumerate() {
             if voice.note.is_active() {
                 voice.note.process(output, &self.lfo);
                 voice.age += 1;

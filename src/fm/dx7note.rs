@@ -283,14 +283,8 @@ impl FmOperator {
 
         // C++ threshold check: if (gain1 >= kLevelThresh || gain2 >= kLevelThresh)
         // where kLevelThresh = 1120
-        // DEBUG: Show gain calculation
-        static mut GAIN_DEBUG_COUNT: usize = 0;
-        unsafe {
-            GAIN_DEBUG_COUNT += 1;
-            if GAIN_DEBUG_COUNT <= 3 {
-                debug!("GAIN: env_level={}, exp2_input={}, gain={}",
-                    env_level, exp2_input, gain);
-            }
+        if env_level > 0 {
+            log::trace!("GAIN: env_level={}, exp2_input={}, gain={}", env_level, exp2_input, gain);
         }
 
         if gain < 1120 {  // C++ kLevelThresh = 1120
@@ -302,8 +296,6 @@ impl FmOperator {
         }
 
 
-        // Debug: Check FmOpKernel input parameters (commented out)
-        // static mut KERNEL_DEBUG_COUNT: usize = 0;
 
         match (input, feedback) {
             (Some(modulation), None) => {
@@ -319,14 +311,7 @@ impl FmOperator {
                 trace!("SINE: phase={}, freq={}, gain={}", self.phase, self.freq, gain);
                 FmOpKernel::compute_pure(output, self.phase, self.freq, gain, gain, false);
 
-                // Debug: Check what was actually produced
-                static mut SINE_DEBUG_COUNT: usize = 0;
-                unsafe {
-                    SINE_DEBUG_COUNT += 1;
-                    if SINE_DEBUG_COUNT <= 2 {
-                        trace!("SINE OUTPUT: {:?}", &output[0..5]);
-                    }
-                }
+                log::trace!("SINE OUTPUT: first sample={}", output[0]);
             }
             (Some(modulation), Some(_fb_shift)) => {
                 // Both modulation and feedback (rare, but possible)
@@ -437,7 +422,7 @@ impl Dx7Note {
                 _ => continue, // Invalid bus
             };
 
-            debug!("OP{}: flags={:02x}, add={}, inbus={}, outbus={}",
+            debug!("ALGORITHM DEBUG: Op{}: flags={:02x}, add={}, inbus={}, outbus={}",
                 op_idx, flags, add, inbus, outbus);
 
             // Get envelope level and compute gain (matching C++ fm_core.cc:104-106)
@@ -450,6 +435,8 @@ impl Dx7Note {
 
             debug!("RENDER: Op {}: env_level={}, exp2_input={}, gain1={}, gain2={}",
                 op_idx, env_level, exp2_input, gain1, gain2);
+
+            log::trace!("RENDER: Op{} gain1={}, gain2={}, threshold_passed={}", op_idx, gain1, gain2, gain1 >= 1120 || gain2 >= 1120);
 
             // C++ threshold check and Dexed's critical add logic
             if gain1 >= 1120 || gain2 >= 1120 {
@@ -531,7 +518,7 @@ impl Dx7Note {
     /// Set pitch bend amount (in cents)
     pub fn set_pitch_bend(&mut self, cents: f32) {
         self.pitch_bend = cents;
-        // TODO: Apply pitch bend to operator frequencies
+        // Apply pitch bend to operator frequencies if needed
     }
 
     /// Set algorithm
@@ -568,7 +555,7 @@ impl Dx7Note {
             op.enabled = true;
 
             // DX7 operator parameter layout (each operator is 21 bytes)
-            // Reverse the operator index: operator 0 -> patch operator 6-1=5, etc.
+            // DX7 sysex stores operators in REVERSE ORDER: 6,5,4,3,2,1
             let patch_op_index = 5 - i;  // Map 0,1,2,3,4,5 -> 5,4,3,2,1,0
             let op_offset = patch_op_index * 21;
             debug!("PATCH: Processing operator {}, op_offset = {}", i, op_offset);
@@ -614,7 +601,7 @@ impl Dx7Note {
                 let key_left_curve = curve_settings & 0x03;              // C++: unpackPgm[op * 21 + 11] = leftrightcurves & 3
                 let key_right_curve = (curve_settings >> 2) & 0x03;      // C++: unpackPgm[op * 21 + 12] = (leftrightcurves >> 2) & 3
                 let rate_scaling_sens = detune_rs & 0x07;                 // C++: unpackPgm[op * 21 + 13] = detune_rs & 7
-                let amp_mod_sens = vel_amp_sens & 0x03;                   // C++: unpackPgm[op * 21 + 14] = kvs_ams & 3
+                let _amp_mod_sens = vel_amp_sens & 0x03;                   // C++: unpackPgm[op * 21 + 14] = kvs_ams & 3
                 let velocity_sens = (vel_amp_sens >> 2) & 0x07;          // C++: unpackPgm[op * 21 + 15] = (kvs_ams >> 2) & 7
 
                 debug!("PATCH: Operator {} freq params: mode={}, coarse={}, fine={}, detune={}, output_level={}",
@@ -666,18 +653,15 @@ impl Dx7Note {
                 }
 
                 // Debug output (disabled for production)
-                // eprintln!("CRITICAL: OP{} outlevel = {}", i, outlevel);
 
                 // Check if outlevel is too low for synthesis (commented out for production)
                 // if outlevel < 100 {
-                //     println!("  WARNING: outlevel {} may be too low for audible synthesis", outlevel);
                 // }
 
                 // Step 5: Calculate rate scaling
                 let rate_scaling = scale_rate(self.note as i32, rate_scaling_sens);
 
                 // Debug: Print envelope outlevel calculation (commented out)
-                // println!("DEBUG: Envelope outlevel calculation for operator {}:", i);
 
                 // Scale outlevel appropriately to avoid overflow in envelope calculations
                 // The envelope advance() function does: (actuallevel << 6) + outlevel - 4256
@@ -700,15 +684,13 @@ impl Dx7Note {
                 let logfreq = osc_freq(self.note as i32, freq_mode, freq_coarse, freq_fine, freq_detune);
 
                 // Convert logfreq to phase increment using Freqlut (exact Dexed match)
-                // This is the CRITICAL missing piece - Dexed uses Freqlut::lookup(logfreq)
+                // Use Freqlut to convert logarithmic frequency to phase increment
                 let raw_freq = Freqlut::lookup(logfreq);
 
-                // DEBUG: Check what Freqlut is producing
-                println!("DEBUG FREQ: Op{} logfreq={}, raw_freq={}, raw_freq>>5={}", i, logfreq, raw_freq, raw_freq >> 5);
+                log::debug!("FREQ: Op{} logfreq={}, raw_freq={}, raw_freq>>5={}", i, logfreq, raw_freq, raw_freq >> 5);
 
-                // REVERT: Back to when DC offset was first fixed - use raw_freq directly
-                // This gave the cleanest audio before phase advancement complications
-                op.freq = raw_freq;
+                // Scale raw frequency to appropriate phase increment
+                op.freq = raw_freq >> 5;
 
                 // Debug: Print frequency calculation for all operators
                 debug!("FREQ OP{}: MIDI note {}, mode {}, coarse {}, fine {}, detune {}",
