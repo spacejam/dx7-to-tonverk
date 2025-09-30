@@ -1,37 +1,16 @@
 [package]
-name = "dx7tv"
-version = "0.1.0"
-edition = "2021"
-description = "DX7 Test Vector CLI - Generate wave files from SYSEX patches using FM synthesis"
-license = "GPL-3.0"
-authors = ["DX7TV Contributors"]
-
-[[bin]]
-name = "dx7tv"
-path = "src/main.rs"
-
-[dependencies]
-clap = { version = "4.0", features = ["derive"] }
-hound = "3.5"
-anyhow = "1.0"
-num-traits = "0.2"
-serde = { version = "1.0", features = ["derive"] }
-log = "0.4"
-env_logger = "0.10"
-
-[dev-dependencies]
-rustfft = "6.1"
-num-complex = "0.4"
+name = "dx7"
+version = "0.0.1"
+edition = "2024"
+authors = ["Tyler Neely"]
+description = "Idiomatic Rust port of Mutable Instruments Plaits DX7/FM synthesis engine"
+license = "MIT"
+repository = "https://github.com/spacejam/dx7"
+keywords = ["audio", "synthesis", "fm", "dx7", "dsp"]
+categories = ["multimedia::audio"]
 
 [features]
-default = ["std"]
-std = []
+fast_op_level_modulation = []
 
-[profile.dev]
-opt-level = 2  # Audio requires some optimization even in debug
-
-[profile.release]
-opt-level = 3
-lto = true
-codegen-units = 1
-panic = "abort"
+[dev-dependencies]
+hound = "3.5.1"

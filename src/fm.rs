@@ -1,5 +1,7 @@
-// Copyright 2025 Tyler Neely (tylerneely@gmail.com).
-// Copyright 2021 Emilie Gillet (emilie.o.gillet@gmail.com)
+// Copyright 2021 Emilie Gillet.
+// Rust port by Tyler Neely.
+//
+// Author: Emilie Gillet (emilie.o.gillet@gmail.com)
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files (the "Software"), to deal
@@ -21,25 +23,12 @@
 //
 // See http://creativecommons.org/licenses/MIT/ for more information.
 
-//! Idiomatic Rust port of Mutable Instruments Plaits DX7/FM synthesis engine.
-//!
-//! This crate provides a port of the FM synthesis components from the
-//! Mutable Instruments Plaits Eurorack module, focusing specifically on
-//! the DX7-style FM synthesis engine.
+//! DX7-style FM synthesis engine
 
-#![warn(missing_docs)]
-
-pub mod fm;
-mod stmlib;
-
-/// Sample rate used by the synthesis engine (in Hz)
-pub const SAMPLE_RATE: f32 = 48000.0;
-
-/// Maximum block size for audio processing
-pub const MAX_BLOCK_SIZE: usize = 24;
-
-/// Number of operators for DX7
-const NUM_OPERATORS: usize = 6;
-
-/// Number of algorithms for DX7;
-const NUM_ALGORITHMS: usize = 32;
+pub mod patch;
+pub mod dx_units;
+pub mod envelope;
+pub mod lfo;
+pub mod operator;
+pub mod algorithms;
+pub mod voice;

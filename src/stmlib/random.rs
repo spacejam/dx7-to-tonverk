@@ -1,5 +1,7 @@
-// Copyright 2025 Tyler Neely (tylerneely@gmail.com).
-// Copyright 2021 Emilie Gillet (emilie.o.gillet@gmail.com)
+// Copyright 2012 Emilie Gillet.
+// Rust port by Tyler Neely.
+//
+// Author: Emilie Gillet (emilie.o.gillet@gmail.com)
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files (the "Software"), to deal
@@ -21,25 +23,31 @@
 //
 // See http://creativecommons.org/licenses/MIT/ for more information.
 
-//! Idiomatic Rust port of Mutable Instruments Plaits DX7/FM synthesis engine.
-//!
-//! This crate provides a port of the FM synthesis components from the
-//! Mutable Instruments Plaits Eurorack module, focusing specifically on
-//! the DX7-style FM synthesis engine.
+//! Fast 16-bit pseudo random number generator
 
-#![warn(missing_docs)]
+use std::cell::Cell;
 
-pub mod fm;
-mod stmlib;
+thread_local! {
+    static RNG_STATE: Cell<u32> = Cell::new(0x21);
+}
 
-/// Sample rate used by the synthesis engine (in Hz)
-pub const SAMPLE_RATE: f32 = 48000.0;
+/// Fast pseudo random number generator (Linear Congruential Generator)
+pub struct Random;
 
-/// Maximum block size for audio processing
-pub const MAX_BLOCK_SIZE: usize = 24;
+impl Random {
+    /// Generates a 32-bit random word
+    #[inline]
+    pub fn get_word() -> u32 {
+        RNG_STATE.with(|state| {
+            let new_state = state.get().wrapping_mul(1664525).wrapping_add(1013904223);
+            state.set(new_state);
+            new_state
+        })
+    }
 
-/// Number of operators for DX7
-const NUM_OPERATORS: usize = 6;
-
-/// Number of algorithms for DX7;
-const NUM_ALGORITHMS: usize = 32;
+    /// Generates a random float in the range [0.0, 1.0)
+    #[inline]
+    pub fn get_float() -> f32 {
+        Self::get_word() as f32 / 4294967296.0
+    }
+}
