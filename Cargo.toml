@@ -13,4 +13,8 @@ categories = ["multimedia::audio"]
 fast_op_level_modulation = []
 
 [dev-dependencies]
+anyhow = "1.0.100"
+env_logger = "0.11.8"
 hound = "3.5.1"
+log = "0.4.28"
+rustfft = "6.4.1"

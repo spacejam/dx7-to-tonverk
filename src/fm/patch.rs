@@ -44,6 +44,7 @@ pub struct PatchBank {
 }
 
 impl PatchBank {
+    /// Parse a bank of 32 patches from a single SYSEX file's data.
     pub fn new(data: &[u8]) -> PatchBank {
         assert_eq!(
             data.len(),
