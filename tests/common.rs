@@ -7,12 +7,12 @@ use dx7::fm::{
     voice::{Parameters, Voice},
 };
 
-pub fn wav_from_patch(
+pub fn generate_samples(
     patch: Patch,
     midi_note: f32,
     sample_rate: u32,
     duration: Duration,
-) -> Vec<u8> {
+) -> Vec<f32> {
     let n_samples = duration.as_millis() as usize * (sample_rate as usize / 1000) as usize;
 
     let mut buf = vec![0.0_f32; n_samples];
@@ -22,6 +22,12 @@ pub fn wav_from_patch(
     let mut voice = Voice::new(patch, midi_note, sample_rate as f32);
 
     voice.render_temp(&parameters, &mut buf);
+
+    buf
+}
+
+pub fn generate_wav(patch: Patch, midi_note: f32, sample_rate: u32, duration: Duration) -> Vec<u8> {
+    let buf = generate_samples(patch, midi_note, sample_rate, duration);
 
     let wav_spec = WavSpec {
         channels: 1,

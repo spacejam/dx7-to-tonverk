@@ -6,7 +6,7 @@ use dx7::fm::{
 };
 
 mod common;
-use common::wav_from_patch;
+use common::generate_wav;
 
 #[test]
 fn smoke_test() {
@@ -29,5 +29,5 @@ fn smoke_test() {
     let patch = patch_bank.patches[PATCH_NUMBER];
     dbg!(&patch);
 
-    let wav_data = wav_from_patch(patch, 60.0, 44100, std::time::Duration::from_secs(2));
+    let wav_data = generate_wav(patch, 60.0, 44100, std::time::Duration::from_secs(2));
 }
