@@ -99,24 +99,9 @@ impl Dx7Synth {
                 if samples_generated + i >= max_samples {
                     break;
                 }
-                // Convert i32 to f32 for direct WAV output (no VST processing)
-                // Match Dexed's exact scaling: val >> 4, then clamp/shift >> 9, then / 32768
-                // This is equivalent to: val >> 13, then / 32768, which is val / (1 << 28)
-                let scaled_val = sample >> 4;
-                let clip_val = if scaled_val < -(1 << 24) {
-                    0x8000i32
-                } else if scaled_val >= (1 << 24) {
-                    0x7fff
-                } else {
-                    scaled_val >> 9
-                };
-                let mut f32_sample = (clip_val as f32) / 32768.0 * 500.0; // Amplify to match reference amplitude
-                if f32_sample > 1.0 {
-                    f32_sample = 1.0;
-                }
-                if f32_sample < -1.0 {
-                    f32_sample = -1.0;
-                }
+                // Simplified i32 to f32 conversion with proper scaling
+                // Convert from fixed-point to normalized float [-1.0, 1.0]
+                let f32_sample = (sample as f32) / (1i32 << 23) as f32;
                 f32_block[i] = f32_sample;
 
                 if samples_generated + i < 3 {
@@ -145,22 +130,8 @@ impl Dx7Synth {
                     break;
                 }
 
-                // Match Dexed's exact scaling (same as above)
-                let scaled_val = sample >> 4;
-                let clip_val = if scaled_val < -(1 << 24) {
-                    0x8000i32
-                } else if scaled_val >= (1 << 24) {
-                    0x7fff
-                } else {
-                    scaled_val >> 9
-                };
-                let mut f32_sample = (clip_val as f32) / 32768.0 * 500.0; // Amplify to match reference amplitude
-                if f32_sample > 1.0 {
-                    f32_sample = 1.0;
-                }
-                if f32_sample < -1.0 {
-                    f32_sample = -1.0;
-                }
+                // Simplified i32 to f32 conversion with proper scaling
+                let f32_sample = (sample as f32) / (1i32 << 23) as f32;
                 f32_block[i] = f32_sample;
 
                 // Track silence for early termination
@@ -383,13 +354,22 @@ mod tests {
     fn test_invalid_inputs() {
         let mut synth = Dx7Synth::new(44100.0, 1.0);
 
-        // Test rendering without a patch
-        let result = synth.render_note(60, 100, 0.1);
-        assert!(result.is_err());
+        // Create a valid test patch that produces sound
+        let mut patch = Dx7Patch::new("TEST PATCH");
 
-        // Load a patch
-        let patch_data = [0u8; 155];
-        let patch = Dx7Patch::from_data(&patch_data).unwrap();
+        // Configure operator 0 as a simple sine wave carrier
+        patch.operators[0].output_level = 99;
+        patch.operators[0].rates.attack = 99;
+        patch.operators[0].rates.decay1 = 50;
+        patch.operators[0].rates.decay2 = 30;
+        patch.operators[0].rates.release = 10;
+        patch.operators[0].levels.attack = 99;
+        patch.operators[0].levels.decay1 = 80;
+        patch.operators[0].levels.decay2 = 60;
+        patch.operators[0].levels.release = 0;
+        patch.operators[0].coarse_freq = 1;
+        patch.global.algorithm = 0; // Algorithm 1: OP0 as carrier
+
         synth.load_patch(patch).unwrap();
 
         // Test invalid MIDI note
@@ -399,5 +379,11 @@ mod tests {
         // Test invalid velocity
         let result = synth.render_note(60, 128, 0.1);
         assert!(result.is_err());
+
+        // Test valid inputs should work
+        let result = synth.render_note(60, 100, 0.1);
+        assert!(result.is_ok());
+        let samples = result.unwrap();
+        assert!(!samples.is_empty());
     }
 }

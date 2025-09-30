@@ -30,13 +30,13 @@ impl Voice {
         !self.note.is_active()
     }
 
-    pub fn trigger(&mut self, midi_note: u8, velocity: u8, channel: u8, age: u32, patch_data: &[u8]) {
+    pub fn trigger(&mut self, midi_note: u8, velocity: u8, channel: u8, age: u32, patch_data: &[u8], sample_rate: f64) {
         self.midi_note = midi_note;
         self.midi_channel = channel;
         self.age = age;
         self.note.init(midi_note, velocity);
         if patch_data.len() >= 155 {
-            self.note.apply_patch(patch_data);
+            self.note.apply_patch_with_sample_rate(patch_data, sample_rate);
         }
     }
 
@@ -63,6 +63,9 @@ pub struct FmCore {
     /// Maximum polyphony
     max_voices: usize,
 
+    /// Sample rate
+    sample_rate: f64,
+
     /// Current patch data
     patch_data: [u8; 155], // DX7 patch is 155 bytes
 }
@@ -84,6 +87,7 @@ impl FmCore {
             controllers: Controllers::new(),
             voice_counter: 0,
             max_voices,
+            sample_rate: 44100.0, // Default sample rate
             patch_data: [0; 155],
         }
     }
@@ -145,7 +149,7 @@ impl FmCore {
         if let Some(voice) = self.voices.get_mut(voice_index) {
             self.voice_counter += 1;
             log::debug!("FM_CORE: Calling trigger on voice {}, patch_data len: {}", voice_index, self.patch_data.len());
-            voice.trigger(midi_note, velocity, channel, self.voice_counter, &self.patch_data);
+            voice.trigger(midi_note, velocity, channel, self.voice_counter, &self.patch_data, self.sample_rate);
             log::debug!("FM_CORE: Voice {} active after trigger: {}", voice_index, voice.note.is_active());
         } else {
             log::debug!("FM_CORE: No voice available for note {}", midi_note);
@@ -221,7 +225,7 @@ impl FmCore {
     fn apply_patch_parameters(&mut self) {
         // Apply patch to all voices
         for voice in &mut self.voices {
-            voice.note.apply_patch(&self.patch_data);
+            voice.note.apply_patch_with_sample_rate(&self.patch_data, self.sample_rate);
         }
     }
 
@@ -249,6 +253,7 @@ impl FmCore {
 
     /// Initialize sample rate dependent parameters
     pub fn init_sample_rate(&mut self, sample_rate: f64) {
+        self.sample_rate = sample_rate;
         Lfo::init(sample_rate);
         super::env::Env::init_sr(sample_rate);
     }

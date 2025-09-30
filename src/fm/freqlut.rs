@@ -60,7 +60,13 @@ impl Freqlut {
             let y = y0 + (((y1 as i64 - y0 as i64) * lowbits as i64) >> SAMPLE_SHIFT) as i32;
             let hibits = logfreq >> 24;
 
-            y >> (MAX_LOGFREQ_INT - hibits)
+            let shift = MAX_LOGFREQ_INT - hibits;
+            if shift < 0 {
+                // If hibits > MAX_LOGFREQ_INT, clamp to a high frequency
+                y << (-shift).min(31) // Limit shift to prevent overflow
+            } else {
+                y >> shift.min(31) // Limit shift to prevent overflow
+            }
         }
     }
 

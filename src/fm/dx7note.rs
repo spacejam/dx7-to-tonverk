@@ -4,7 +4,7 @@
 //! This is the main synthesis unit that combines all the FM operators,
 //! envelopes, and modulation to produce the final audio output.
 
-use super::{env::Env, lfo::Lfo, fm_op_kernel::FmOpKernel, constants::{N, LG_N}, exp2::Exp2, freqlut::Freqlut};
+use super::{env::Env, lfo::Lfo, fm_op_kernel::FmOpKernel, constants::{N, LG_N}, exp2::Exp2, ref_freq};
 use log::{debug, trace};
 
 /// Velocity lookup table (from C++ dx7note.cc)
@@ -528,6 +528,12 @@ impl Dx7Note {
 
     /// Apply DX7 patch parameters to this note
     pub fn apply_patch(&mut self, patch_data: &[u8]) {
+        // Use default 48kHz sample rate for backwards compatibility
+        self.apply_patch_with_sample_rate(patch_data, 48000.0);
+    }
+
+    /// Apply DX7 patch parameters to this note with specified sample rate
+    pub fn apply_patch_with_sample_rate(&mut self, patch_data: &[u8], sample_rate: f64) {
         if patch_data.len() < 155 {
             debug!("PATCH: apply_patch called with insufficient data: {} < 155", patch_data.len());
             return;
@@ -680,23 +686,33 @@ impl Dx7Note {
                 // Initialize envelope with exact C++ parameters
                 op.env.init(&rates, &levels, scaled_outlevel, rate_scaling);
 
-                // Calculate frequency using exact C++ logarithmic system
-                let logfreq = osc_freq(self.note as i32, freq_mode, freq_coarse, freq_fine, freq_detune);
+                // Calculate frequency using reference implementation (simple, direct)
+                let base_freq = ref_freq::base_frequency(self.note, sample_rate, 0.0);
+                let one_hz = 1.0 / sample_rate as f32;
 
-                // Convert logfreq to phase increment using Freqlut (exact Dexed match)
-                // Use Freqlut to convert logarithmic frequency to phase increment
-                let raw_freq = Freqlut::lookup(logfreq);
+                // Calculate operator frequency ratio (convert i32 to u8)
+                let ratio = ref_freq::frequency_ratio(
+                    freq_mode as u8,
+                    freq_coarse as u8,
+                    freq_fine as u8,
+                    freq_detune as u8
+                );
 
-                log::debug!("FREQ: Op{} logfreq={}, raw_freq={}, raw_freq>>5={}", i, logfreq, raw_freq, raw_freq >> 5);
+                // Get operator frequency as phase increment per sample
+                let phase_inc_per_sample = ref_freq::operator_frequency(ratio, base_freq, one_hz);
 
-                // Scale raw frequency to appropriate phase increment
-                op.freq = raw_freq >> 5;
+                // Convert to 32-bit phase increment (matching reference operator.h)
+                // frequency[i] = static_cast<uint32_t>(std::min(f[i], 0.5f) * 4294967296.0f);
+                let phase_inc_32bit = (phase_inc_per_sample.min(0.5) * ((1u64 << 32) as f32)) as i32;
+                op.freq = phase_inc_32bit;
+
+                log::debug!("FREQ: Op{} ratio={}, phase_per_sample={}, phase_inc={}", i, ratio, phase_inc_per_sample, op.freq);
 
                 // Debug: Print frequency calculation for all operators
                 debug!("FREQ OP{}: MIDI note {}, mode {}, coarse {}, fine {}, detune {}",
                     i, self.note, freq_mode, freq_coarse, freq_fine, freq_detune);
-                debug!("FREQ OP{}: logfreq={}, raw_freq={}, scaled_freq={}",
-                    i, logfreq, raw_freq, op.freq);
+                debug!("FREQ OP{}: ratio={}, phase_per_sample={}, phase_inc={}",
+                    i, ratio, phase_inc_per_sample, op.freq);
                 trace!("FREQ OP{}: patch_data[{}..{}] = {:?}",
                     i, op_offset, op_offset + 21, &patch_data[op_offset..op_offset.min(patch_data.len()).min(op_offset + 21)]);
 
@@ -708,9 +724,13 @@ impl Dx7Note {
                 let default_levels = [99, 90, 70, 0];
                 op.env.init(&default_rates, &default_levels, 99 << 7, 0);
 
-                // Default frequency: calculate logfreq and use Freqlut
-                let default_logfreq = osc_freq(self.note as i32, 0, 1, 0, 7); // Basic 1:1 ratio
-                op.freq = Freqlut::lookup(default_logfreq);
+                // Default frequency using reference implementation: basic 1:1 ratio
+                let base_freq = ref_freq::base_frequency(self.note, sample_rate, 0.0);
+                let ratio = ref_freq::frequency_ratio(0, 1, 0, 7); // Basic 1:1 ratio
+                let one_hz = 1.0 / sample_rate as f32;
+                let phase_inc_per_sample = ref_freq::operator_frequency(ratio, base_freq, one_hz);
+                let phase_inc_32bit = (phase_inc_per_sample.min(0.5) * ((1u64 << 32) as f32)) as i32;
+                op.freq = phase_inc_32bit;
                 op.level = 99 << 7;
             }
         }

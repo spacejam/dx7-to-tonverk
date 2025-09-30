@@ -470,10 +470,11 @@ mod tests {
     #[test]
     fn test_operator_params() {
         let mut data = [0u8; 155];
-        // Set some operator 0 data
-        data[0] = 50; // R1
-        data[4] = 99; // L1
-        data[16] = 80; // Output level
+        // Set operator 0 data (which is stored at sysex position 5, so base = 5*21 = 105)
+        let base = 5 * 21; // Operator 0 is at sysex position 5
+        data[base + 0] = 50; // R1
+        data[base + 4] = 99; // L1
+        data[base + 16] = 80; // Output level
 
         let patch = Dx7Patch::from_data(&data).unwrap();
         let op = patch.get_operator(0).unwrap();

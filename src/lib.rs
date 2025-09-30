@@ -23,6 +23,7 @@ pub mod fm {
     pub mod lfo;
     pub mod pitchenv;
     pub mod porta;
+    pub mod ref_freq;
     pub mod sin;
     pub mod tuning;
 

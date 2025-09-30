@@ -132,7 +132,7 @@ fn test_audio_output_against_wav_file() {
     std::fs::create_dir_all("out").expect("Failed to create output directory");
 
     let result = std::process::Command::new("cargo")
-        .args(&["run", "--", "./star1-fast-decay.syx", "60", "2", output_path])
+        .args(&["run", "--bin", "dx7tv", "--", "./star1-fast-decay.syx", "60", "2", output_path])
         .output()
         .expect("Failed to run dx7tv command");
 
@@ -155,8 +155,8 @@ fn test_audio_output_against_wav_file() {
     assert_eq!(spec.sample_rate, 44100, "Expected 44.1kHz sample rate");
     assert_eq!(spec.sample_format, SampleFormat::Int, "Expected integer samples");
 
-    // Read all samples
-    let samples: Result<Vec<i16>, _> = reader.samples::<i16>().collect();
+    // Read all samples (24-bit WAV uses i32 samples)
+    let samples: Result<Vec<i32>, _> = reader.samples::<i32>().collect();
     let samples = samples.expect("Failed to read WAV samples");
 
     let duration_seconds = samples.len() as f64 / spec.sample_rate as f64;
@@ -170,7 +170,7 @@ fn test_audio_output_against_wav_file() {
     );
 
     // Test for non-silent audio
-    let non_zero_samples = samples.iter().filter(|&&x| x.abs() > 10).count(); // Threshold for 16-bit
+    let non_zero_samples = samples.iter().filter(|&&x| x.abs() > 256).count(); // Threshold for 24-bit
     let non_zero_percentage = (non_zero_samples as f64 / samples.len() as f64) * 100.0;
 
     println!("WAV non-zero samples: {}/{} ({:.1}%)", non_zero_samples, samples.len(), non_zero_percentage);
@@ -182,12 +182,12 @@ fn test_audio_output_against_wav_file() {
 
     // Test peak amplitude
     let max_amplitude = samples.iter().map(|&x| x.abs()).max().unwrap_or(0) as f64;
-    let max_amplitude_normalized = max_amplitude / 32768.0; // Normalize to -1.0 to 1.0
+    let max_amplitude_normalized = max_amplitude / 8388608.0; // Normalize 24-bit to -1.0 to 1.0 (2^23)
 
-    println!("WAV peak amplitude: {} ({:.3} normalized)", max_amplitude as i16, max_amplitude_normalized);
+    println!("WAV peak amplitude: {} ({:.3} normalized)", max_amplitude as i32, max_amplitude_normalized);
 
     assert!(
-        max_amplitude > 100.0, // Should have some significant amplitude in 16-bit range
+        max_amplitude > 25600.0, // Should have some significant amplitude in 24-bit range
         "WAV peak amplitude too low: {} (normalized: {:.6})",
         max_amplitude as i16,
         max_amplitude_normalized
