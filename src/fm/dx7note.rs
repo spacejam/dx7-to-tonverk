@@ -698,21 +698,24 @@ impl Dx7Note {
                     freq_detune as u8
                 );
 
-                // Get operator frequency as phase increment per sample
+                // Get operator frequency as phase increment per sample (0.0 to 1.0 range)
                 let phase_inc_per_sample = ref_freq::operator_frequency(ratio, base_freq, one_hz);
 
-                // Convert to 32-bit phase increment (matching reference operator.h)
-                // frequency[i] = static_cast<uint32_t>(std::min(f[i], 0.5f) * 4294967296.0f);
-                let phase_inc_32bit = (phase_inc_per_sample.min(0.5) * ((1u64 << 32) as f32)) as i32;
-                op.freq = phase_inc_32bit;
+                // Convert to actual frequency in Hz
+                let freq_hz = phase_inc_per_sample * sample_rate as f32;
 
-                log::debug!("FREQ: Op{} ratio={}, phase_per_sample={}, phase_inc={}", i, ratio, phase_inc_per_sample, op.freq);
+                // Convert to 24-bit phase increment for Dexed FM engine
+                // Phase increment = (freq_hz / sample_rate) * 2^24
+                let phase_inc_24bit = (freq_hz / sample_rate as f32 * ((1 << 24) as f32)) as i32;
+                op.freq = phase_inc_24bit;
+
+                log::debug!("FREQ: Op{} ratio={}, freq_hz={}, phase_inc_24bit={}", i, ratio, freq_hz, op.freq);
 
                 // Debug: Print frequency calculation for all operators
                 debug!("FREQ OP{}: MIDI note {}, mode {}, coarse {}, fine {}, detune {}",
                     i, self.note, freq_mode, freq_coarse, freq_fine, freq_detune);
-                debug!("FREQ OP{}: ratio={}, phase_per_sample={}, phase_inc={}",
-                    i, ratio, phase_inc_per_sample, op.freq);
+                debug!("FREQ OP{}: ratio={}, freq_hz={}, phase_inc_24bit={}",
+                    i, ratio, freq_hz, op.freq);
                 trace!("FREQ OP{}: patch_data[{}..{}] = {:?}",
                     i, op_offset, op_offset + 21, &patch_data[op_offset..op_offset.min(patch_data.len()).min(op_offset + 21)]);
 
@@ -729,8 +732,9 @@ impl Dx7Note {
                 let ratio = ref_freq::frequency_ratio(0, 1, 0, 7); // Basic 1:1 ratio
                 let one_hz = 1.0 / sample_rate as f32;
                 let phase_inc_per_sample = ref_freq::operator_frequency(ratio, base_freq, one_hz);
-                let phase_inc_32bit = (phase_inc_per_sample.min(0.5) * ((1u64 << 32) as f32)) as i32;
-                op.freq = phase_inc_32bit;
+                let freq_hz = phase_inc_per_sample * sample_rate as f32;
+                let phase_inc_24bit = (freq_hz / sample_rate as f32 * ((1 << 24) as f32)) as i32;
+                op.freq = phase_inc_24bit;
                 op.level = 99 << 7;
             }
         }
