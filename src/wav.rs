@@ -5,6 +5,7 @@ use hound::{WavSpec, WavWriter};
 use std::time::Duration;
 
 use dx7::Patch;
+
 /// Generates the WAV file and corresponding sample start and end ranges for the subsample at each
 /// pitch.
 ///

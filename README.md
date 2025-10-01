@@ -77,7 +77,7 @@ tv7 list ./star1-fast-decay.syx
 30: MUTE BASS
 31: *syn.Orga
 
-# generate some files:
+# generate some files from 3 different patches based on their index listed above:
 tv7 generate ./star1-fast-decay.syx 9
 tv7 generate ./star1-fast-decay.syx 7
 tv7 generate ./star1-fast-decay.syx 25
