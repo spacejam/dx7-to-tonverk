@@ -1,20 +1,17 @@
 [package]
-name = "dx7"
-version = "0.0.2"
+name = "tv7"
+version = "0.0.1"
 edition = "2024"
 authors = ["Tyler Neely"]
-description = "Rust port of Mutable Instruments Plaits DX7/FM synthesis engine"
+description = "Generate Elektron Tonverk multisamples from your favorite DX7 SYSEX patches"
 license = "MIT"
-repository = "https://github.com/spacejam/dx7"
-keywords = ["audio", "synthesis", "fm", "dx7", "dsp"]
+repository = "https://github.com/spacejam/tv7"
+keywords = ["audio", "synthesis", "fm", "dx7", "dsp", "tonverk"]
 categories = ["multimedia::audio"]
 
 [features]
 fast_op_level_modulation = []
 
-[dev-dependencies]
-anyhow = "1.0.100"
-env_logger = "0.11.8"
+[dependencies]
+dx7 = "0.0.2"
 hound = "3.5.1"
-log = "0.4.28"
-rustfft = "6.4.1"
