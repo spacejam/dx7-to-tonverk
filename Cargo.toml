@@ -1,9 +1,9 @@
 [package]
 name = "dx7"
-version = "0.0.1"
+version = "0.0.2"
 edition = "2024"
 authors = ["Tyler Neely"]
-description = "Idiomatic Rust port of Mutable Instruments Plaits DX7/FM synthesis engine"
+description = "Rust port of Mutable Instruments Plaits DX7/FM synthesis engine"
 license = "MIT"
 repository = "https://github.com/spacejam/dx7"
 keywords = ["audio", "synthesis", "fm", "dx7", "dsp"]

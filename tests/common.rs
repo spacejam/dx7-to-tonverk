@@ -3,6 +3,7 @@ use std::time::Duration;
 use hound::{WavSpec, WavWriter};
 
 use dx7::fm::{
+    lfo::Lfo,
     patch::Patch,
     voice::{Parameters, Voice},
 };
@@ -21,6 +22,11 @@ pub fn generate_samples(
     let silence_duration_samples = (sample_rate as usize * 100) / 1000; // 100ms
 
     let mut voice = Voice::new(patch, sample_rate as f32);
+    let mut lfo = Lfo::new();
+    lfo.init(sample_rate as f32);
+    lfo.set(&patch.modulations);
+    lfo.reset();
+
     let mut output = Vec::new();
 
     // Phase 1: Render with gate on for the requested duration
@@ -35,6 +41,14 @@ pub fn generate_samples(
     let mut remaining = n_samples;
     while remaining > 0 {
         let block_size = remaining.min(MAX_BLOCK_SIZE);
+
+        // Step the LFO
+        lfo.step(block_size as f32);
+
+        // Apply LFO modulations to parameters
+        parameters.pitch_mod = lfo.pitch_mod();
+        parameters.amp_mod = lfo.amp_mod();
+
         let mut buf = vec![0.0_f32; block_size * 3]; // render_temp needs 3x size
         voice.render_temp(&parameters, &mut buf);
         output.extend_from_slice(&buf[..block_size]);
@@ -46,6 +60,13 @@ pub fn generate_samples(
     let mut consecutive_silent_samples = 0;
 
     loop {
+        // Step the LFO
+        lfo.step(MAX_BLOCK_SIZE as f32);
+
+        // Apply LFO modulations to parameters
+        parameters.pitch_mod = lfo.pitch_mod();
+        parameters.amp_mod = lfo.amp_mod();
+
         let mut chunk = vec![0.0_f32; MAX_BLOCK_SIZE * 3];
         voice.render_temp(&parameters, &mut chunk);
 
