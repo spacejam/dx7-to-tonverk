@@ -168,7 +168,7 @@ pub struct ModulationParameters {
 #[derive(Debug, Clone, Copy)]
 pub struct Patch {
     /// Six operators (DX7 has 6 operators)
-    pub op: [Operator; 6],
+    pub(crate) op: [Operator; 6],
     /// Pitch envelope
     pub pitch_envelope: PitchEnvelope,
     /// Algorithm number (0-31)
@@ -204,6 +204,25 @@ impl Default for Patch {
 }
 
 impl Patch {
+    /// Set the 1-offset operator number corresponding to DX7 patches. Internally this is mapped to
+    /// a 0-offset reverse ordered sequence.
+    pub fn set_op(&mut self, idx: usize, operator: Operator) {
+        assert!(
+            idx > 0 && idx < 7,
+            "invalid operator index. Must be between 1 and 6 inclusive"
+        );
+
+        // 6 -> 0
+        // 5 -> 1
+        // 4 -> 2
+        // 3 -> 3
+        // 4 -> 4
+        // 1 -> 5
+        let actual_idx = 6 - idx;
+
+        self.op[actual_idx] = operator;
+    }
+
     /// Creates a new patch from SYSEX bytes.
     pub fn new(data: &[u8]) -> Self {
         let mut ret = Self::default();

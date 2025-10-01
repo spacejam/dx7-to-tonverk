@@ -1,3 +1,5 @@
+use std::io::Write;
+
 use hound::{WavSpec, WavWriter};
 
 use dx7::fm::{
@@ -27,7 +29,12 @@ fn smoke_test() {
     }
 
     let patch = patch_bank.patches[PATCH_NUMBER];
+
     dbg!(&patch);
 
     let wav_data = generate_wav(patch, 60.0, 44100, std::time::Duration::from_secs(2));
+
+    let mut file = std::fs::File::create("smoke.wav").unwrap();
+    file.write_all(&wav_data).unwrap();
+    file.sync_all().unwrap();
 }

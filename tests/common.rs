@@ -7,7 +7,7 @@ use dx7::fm::{
     voice::{Parameters, Voice},
 };
 
-/// midi_note is based on midi note 60 correlating to C3 at 260hz. midi_note of 81 corresponds to
+/// midi_note is based on midi note 60.0 correlating to C4 at 260hz. midi_note of 69.0 corresponds to
 /// A4 at 437hz.
 pub fn generate_samples(
     patch: Patch,
@@ -33,7 +33,7 @@ pub fn generate_samples(
     buf
 }
 
-/// midi_note is based on midi note 60 correlating to C3 at 260hz. midi_note of 81 corresponds to
+/// midi_note is based on midi note 60.0 correlating to C4 at 260hz. midi_note of 69.0 corresponds to
 /// A4 at 437hz.
 pub fn generate_wav(patch: Patch, midi_note: f32, sample_rate: u32, duration: Duration) -> Vec<u8> {
     let buf = generate_samples(patch, midi_note, sample_rate, duration);
