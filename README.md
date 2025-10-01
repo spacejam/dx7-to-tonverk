@@ -77,12 +77,13 @@ tv7 list ./star1-fast-decay.syx
 30: MUTE BASS
 31: *syn.Orga
 
-# generate some files from 3 different patches based on their index listed above:
+# generate some multisamples from 3 different patches based on their index listed above:
 tv7 generate ./star1-fast-decay.syx 9
 tv7 generate ./star1-fast-decay.syx 7
 tv7 generate ./star1-fast-decay.syx 25
 
-# move the files over. note that non-Tonverk-friendly characters have been stripped out of the names
+# move the files over. note that non-Tonverk-friendly
+# characters have been stripped out of the names
 cp -r SYNHARMO CHORUS\ \ \ 3 Fairl\ 2 /Volumes/Tonverk/User/Multi-sampled\ Instruments
 
 # eject the Tonverk via cli like a hacker
