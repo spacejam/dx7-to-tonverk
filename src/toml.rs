@@ -3,7 +3,6 @@ pub fn format_toml(name: &str, pitch_start_ends: &[(u8, usize, usize)]) -> Strin
     ret.push_str("# ELEKTRON MULTI-SAMPLE MAPPING FORMAT\n");
     ret.push_str("version = 0\n");
     ret.push_str(&format!("name = '{}'\n", name));
-    ret.push_str("\n");
 
     for (pitch, start, end) in pitch_start_ends {
         let formatted = format!(
@@ -16,7 +15,6 @@ velocity-layers = [
       {{ sample = "{name}.wav", trim-start = {start}, trim-end = {end} }}
   ]}}
 ]
-
         "#
         );
 

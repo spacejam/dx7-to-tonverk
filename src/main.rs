@@ -82,12 +82,18 @@ fn main() {
             note_increment,
         } => {
             if min_midi_note > 127 {
-                eprintln!("Error: min_midi_note must be <= 127 (got {})", min_midi_note);
+                eprintln!(
+                    "Error: min_midi_note must be <= 127 (got {})",
+                    min_midi_note
+                );
                 std::process::exit(1);
             }
 
             if max_midi_note > 127 {
-                eprintln!("Error: max_midi_note must be <= 127 (got {})", max_midi_note);
+                eprintln!(
+                    "Error: max_midi_note must be <= 127 (got {})",
+                    max_midi_note
+                );
                 std::process::exit(1);
             }
 
@@ -116,6 +122,7 @@ fn main() {
             }
 
             let patch = patch_bank.patches[patch_number];
+            let name = tonverk_sanitize(&patch.name());
 
             let pitches_iter = (0..)
                 .map(move |i| min_midi_note + i * note_increment)
@@ -127,7 +134,6 @@ fn main() {
             let (wav_data, pitch_start_end) =
                 wav::generate_wav(patch, &pitches, SAMPLE_RATE, key_on_duration);
 
-            let name = patch.name();
             let base_path = std::path::PathBuf::from(name.clone());
 
             std::fs::create_dir(&name).expect("unable to make directory");
@@ -135,8 +141,7 @@ fn main() {
             // write WAV
             let wav_file_name = format!("{}.wav", name);
             let wav_path = base_path.join(&wav_file_name);
-            let mut wav_file =
-                std::fs::File::create(wav_path).expect("unable to create wav file");
+            let mut wav_file = std::fs::File::create(wav_path).expect("unable to create wav file");
             wav_file.write_all(&wav_data).unwrap();
             wav_file.sync_all().unwrap();
 
@@ -150,4 +155,20 @@ fn main() {
             toml_file.sync_all().unwrap();
         }
     }
+}
+
+fn tonverk_sanitize(input: &str) -> String {
+    let allowed_symbols = [
+        '~', '!', '@', '#', '$', '%', '^', '&', '(', ')', '_', '+', '-', '=', ' ',
+    ];
+    let allowed_letters = [
+        'å', 'ß', 'ä', 'ö', 'ü', 'æ', 'ø', 'ç', 'ñ', 'Å', 'ẞ', 'Ä', 'Ö', 'Ü', 'Æ', 'Ø', 'Ç', 'Ñ',
+    ];
+
+    input
+        .chars()
+        .filter(|c| {
+            c.is_ascii_alphanumeric() || allowed_symbols.contains(c) || allowed_letters.contains(c)
+        })
+        .collect()
 }
