@@ -42,6 +42,9 @@ pub fn generate_wav(
         sample_format: hound::SampleFormat::Float,
     };
 
+    // Find the longest buffer
+    let max_len = bufs.values().map(|buf| buf.len()).max().unwrap_or(0);
+
     let mut wav = vec![];
     let mut pitch_start_end = vec![];
     let mut cursor = std::io::Cursor::new(&mut wav);
@@ -51,11 +54,19 @@ pub fn generate_wav(
     let mut running_sample_count = 0;
 
     for (pitch, buf) in &bufs {
+        // Write the actual samples
         for sample in buf {
             wav_writer.write_sample(*sample).unwrap();
         }
+
+        // Pad with zeros to match the longest buffer
+        let padding_needed = max_len - buf.len();
+        for _ in 0..padding_needed {
+            wav_writer.write_sample(0.0f32).unwrap();
+        }
+
         let start = running_sample_count;
-        let end = start + buf.len();
+        let end = start + max_len;
         running_sample_count = end;
         pitch_start_end.push((*pitch, start, end));
     }
