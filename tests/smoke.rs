@@ -13,7 +13,6 @@ use common::generate_wav;
 #[test]
 fn smoke_test() {
     const SAMPLE_RATE: f32 = 44100.0;
-    const PATCH_NUMBER: usize = 0;
 
     let patch_bank_bytes =
         std::fs::read("star1-fast-decay.syx").expect("test file star1-fast-decay.syx not found");
@@ -28,13 +27,14 @@ fn smoke_test() {
         );
     }
 
-    let patch = patch_bank.patches[PATCH_NUMBER];
+    for patch_number in [11] {
+        let patch = patch_bank.patches[patch_number];
 
-    dbg!(&patch);
+        let wav_data = generate_wav(patch, 60.0, 44100, std::time::Duration::from_secs(2));
 
-    let wav_data = generate_wav(patch, 60.0, 44100, std::time::Duration::from_secs(2));
-
-    let mut file = std::fs::File::create("smoke.wav").unwrap();
-    file.write_all(&wav_data).unwrap();
-    file.sync_all().unwrap();
+        let file_name = format!("smoke-{}.wav", patch.name.iter().collect::<String>().trim());
+        let mut file = std::fs::File::create(file_name).unwrap();
+        file.write_all(&wav_data).unwrap();
+        file.sync_all().unwrap();
+    }
 }

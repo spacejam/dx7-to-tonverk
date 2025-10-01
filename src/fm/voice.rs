@@ -203,6 +203,8 @@ impl Voice {
         let gate_duration = 1.5 * self.sample_rate;
         let envelope_sample = gate_duration * parameters.envelope_control;
 
+        let input_note = parameters.note - 24.0 + self.patch.transpose as f32;
+
         let pitch_envelope = if parameters.sustain {
             self.pitch_envelope
                 .render_at_sample(envelope_sample, gate_duration)
@@ -212,13 +214,13 @@ impl Voice {
         };
 
         let pitch_mod = pitch_envelope + parameters.pitch_mod;
-        let f0 = self.a0 * 0.25 * semitones_to_ratio_safe(parameters.note - 9.0 + pitch_mod * 12.0);
+        let f0 = self.a0 * 0.25 * semitones_to_ratio_safe(input_note - 9.0 + pitch_mod * 12.0);
 
         let note_on = parameters.gate && !self.gate;
         self.gate = parameters.gate;
         if note_on || parameters.sustain {
             self.normalized_velocity = normalize_velocity(parameters.velocity);
-            self.note = parameters.note;
+            self.note = input_note;
         }
 
         if note_on && self.patch.reset_phase != 0 {
