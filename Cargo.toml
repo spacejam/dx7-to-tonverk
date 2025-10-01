@@ -13,6 +13,6 @@ categories = ["multimedia::audio"]
 fast_op_level_modulation = []
 
 [dependencies]
-dx7 = "0.0.2"
+dx7 = "0.0.4"
 hound = "3.5.1"
 clap = { version = "4.5", features = ["derive"] }
