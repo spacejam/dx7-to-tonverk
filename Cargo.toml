@@ -1,6 +1,6 @@
 [package]
 name = "tv7"
-version = "0.0.2"
+version = "0.0.3"
 edition = "2024"
 authors = ["Tyler Neely"]
 description = "Generate Elektron Tonverk multisamples from your favorite DX7 SYSEX patches"
