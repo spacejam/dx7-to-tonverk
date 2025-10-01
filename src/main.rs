@@ -1,85 +1,124 @@
-use std::collections::BTreeMap;
 use std::io::Write;
-
-use hound::{WavSpec, WavWriter};
-
-use dx7::PatchBank;
+use std::path::PathBuf;
 use std::time::Duration;
 
-use dx7::Patch;
+use clap::Parser;
+use dx7::PatchBank;
 
-/// midi_note is based on midi note 60.0 correlating to C4 at 260hz. midi_note of 69.0 corresponds to
-/// A4 at 437hz.
-pub fn generate_wav(
-    patch: Patch,
-    midi_notes: &[u8],
-    sample_rate: u32,
-    duration: Duration,
-) -> Vec<u8> {
-    // map from midi notes to associated buf
-    let mut bufs: BTreeMap<u8, Vec<f32>> = BTreeMap::new();
+mod wav;
 
-    for midi_note in midi_notes {
-        let mut buf = patch.generate_samples(*midi_note as f32, sample_rate, duration);
+mod toml;
 
-        // Find peak amplitude for normalization
-        let peak = buf.iter().map(|s| s.abs()).fold(0.0f32, f32::max);
+fn parse_duration(s: &str) -> Result<Duration, std::num::ParseIntError> {
+    let ms: u64 = s.parse()?;
+    Ok(Duration::from_millis(ms))
+}
 
-        // Normalize to -1.0 to 1.0 range if needed, with headroom
-        let normalize_factor = if peak > 0.8 { 0.8 / peak } else { 1.0 };
+/// Generate Elektron Tonverk multisamples from DX7 SYSEX patches
+#[derive(Parser, Debug)]
+#[command(version, about, long_about = None)]
+struct Args {
+    /// Path to the DX7 sysex bank file
+    sysex_file: PathBuf,
 
-        for sample in &mut buf {
-            *sample *= normalize_factor;
-        }
+    /// Patch number (0-indexed)
+    patch_number: usize,
 
-        bufs.insert(*midi_note, buf);
-    }
+    /// Key on duration in milliseconds
+    #[arg(long, default_value = "2000", value_parser = parse_duration)]
+    key_on_duration: Duration,
 
-    let wav_spec = WavSpec {
-        channels: 1,
-        sample_rate,
-        bits_per_sample: 32,
-        sample_format: hound::SampleFormat::Float,
-    };
+    /// Minimum MIDI note
+    #[arg(long, default_value_t = 60)]
+    min_midi_note: u8,
 
-    let mut ret = vec![];
-    let mut cursor = std::io::Cursor::new(&mut ret);
+    /// Maximum MIDI note
+    #[arg(long, default_value_t = 108)]
+    max_midi_note: u8,
 
-    let mut wav_writer = WavWriter::new(&mut cursor, wav_spec).unwrap();
-
-    for (_pitch, buf) in &bufs {
-        for sample in buf {
-            wav_writer.write_sample(*sample).unwrap();
-        }
-    }
-
-    wav_writer.finalize().unwrap();
-
-    ret
+    /// Note increment
+    #[arg(long, default_value_t = 3)]
+    note_increment: u8,
 }
 
 fn main() {
     const SAMPLE_RATE: u32 = 44100;
 
-    let patch_bank_bytes =
-        std::fs::read("star1-fast-decay.syx").expect("test file star1-fast-decay.syx not found");
+    let args = Args::parse();
+
+    if args.min_midi_note > 127 {
+        eprintln!(
+            "Error: min_midi_note must be <= 127 (got {})",
+            args.min_midi_note
+        );
+        std::process::exit(1);
+    }
+
+    if args.max_midi_note > 127 {
+        eprintln!(
+            "Error: max_midi_note must be <= 127 (got {})",
+            args.max_midi_note
+        );
+        std::process::exit(1);
+    }
+
+    if args.min_midi_note > args.max_midi_note {
+        eprintln!(
+            "Error: min_midi_note ({}) must be <= max_midi_note ({})",
+            args.min_midi_note, args.max_midi_note
+        );
+        std::process::exit(1);
+    }
+
+    let patch_bank_bytes = std::fs::read(&args.sysex_file).unwrap_or_else(|e| {
+        eprintln!(
+            "Error reading sysex file '{}': {}",
+            args.sysex_file.display(),
+            e
+        );
+        std::process::exit(1);
+    });
 
     let patch_bank = PatchBank::new(&patch_bank_bytes);
 
-    let patch_number = 0;
-    let patch = patch_bank.patches[patch_number];
+    if args.patch_number >= patch_bank.patches.len() {
+        eprintln!(
+            "Error: patch_number {} is out of range (bank has {} patches)",
+            args.patch_number,
+            patch_bank.patches.len()
+        );
+        std::process::exit(1);
+    }
 
-    let pitches = [60, 80, 90];
+    let patch = patch_bank.patches[args.patch_number];
 
-    let wav_data = generate_wav(
-        patch,
-        &pitches,
-        SAMPLE_RATE,
-        std::time::Duration::from_secs(2),
-    );
+    let pitches_iter = (0..)
+        .map(move |i| args.min_midi_note + i * args.note_increment)
+        .take_while(move |&x| x < args.max_midi_note)
+        .chain(std::iter::once(args.max_midi_note));
 
-    let file_name = format!("smoke-{}.wav", patch.name.iter().collect::<String>().trim());
-    let mut file = std::fs::File::create(file_name).unwrap();
-    file.write_all(&wav_data).unwrap();
-    file.sync_all().unwrap();
+    let pitches: Vec<u8> = pitches_iter.collect();
+
+    let (wav_data, pitch_start_end) =
+        wav::generate_wav(patch, &pitches, SAMPLE_RATE, args.key_on_duration);
+
+    let name = format!("{}", patch.name.iter().collect::<String>().trim());
+    let base_path = std::path::PathBuf::from(name.clone());
+
+    std::fs::create_dir(&name).expect("unable to make directory");
+
+    // write WAV
+    let wav_file_name = format!("{}.wav", name);
+    let wav_path = base_path.join(&wav_file_name);
+    let mut wav_file = std::fs::File::create(wav_path).expect("unable to create wav file");
+    wav_file.write_all(&wav_data).unwrap();
+    wav_file.sync_all().unwrap();
+
+    // write .elmulti TOML
+    let toml_file_name = format!("{}.elmulti", name);
+    let toml_path = base_path.join(&toml_file_name);
+    let toml_data = toml::format_toml(&name, &pitch_start_end);
+    let mut toml_file = std::fs::File::create(toml_path).expect("unable to create elmulti file");
+    toml_file.write_all(toml_data.as_bytes()).unwrap();
+    toml_file.sync_all().unwrap();
 }
