@@ -2,13 +2,10 @@ use std::io::Write;
 
 use hound::{WavSpec, WavWriter};
 
-use dx7::fm::{
-    patch::{Patch, PatchBank},
-    voice::{Parameters, Voice},
-};
-
 mod common;
+
 use common::generate_wav;
+use dx7::PatchBank;
 
 #[test]
 fn smoke_test() {
@@ -27,7 +24,7 @@ fn smoke_test() {
         );
     }
 
-    for patch_number in [11] {
+    for patch_number in 0..32 {
         let patch = patch_bank.patches[patch_number];
 
         let wav_data = generate_wav(patch, 60.0, 44100, std::time::Duration::from_secs(2));

@@ -1,7 +1,5 @@
-// Copyright 2016 Emilie Gillet.
-// Rust port by Tyler Neely.
-//
-// Author: Emilie Gillet (emilie.o.gillet@gmail.com)
+// Copyright 2025 Tyler Neely (tylerneely@gmail.com).
+// Copyright 2021 Emilie Gillet (emilie.o.gillet@gmail.com)
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files (the "Software"), to deal

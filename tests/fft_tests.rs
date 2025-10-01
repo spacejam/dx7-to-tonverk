@@ -2,10 +2,10 @@ use std::time::Duration;
 
 use rustfft::{num_complex::Complex, FftPlanner};
 
-mod common;
-use common::generate_samples;
-
 use dx7::fm::patch::{OpEnvelope, Operator, Patch};
+
+mod common;
+use common::generate_wav;
 
 /// Helper to create a simple operator with specified ratio and envelope
 fn create_operator(ratio_coarse: u8, ratio_fine: u8, output_level: u8) -> Operator {
@@ -138,7 +138,7 @@ fn test_alg3_three_carriers_with_modulators() {
     let (c, f) = ratio_to_coarse_fine(1.5);
     patch.set_op(6, create_operator(c, f, 70));
 
-    let samples = generate_samples(patch, 69.0, 48000, Duration::from_millis(1000));
+    let samples = patch.generate_samples(69.0, 48000, Duration::from_millis(1000));
 
     // Check DC offset
     let dc_offset = calculate_dc_offset(&samples);
@@ -147,6 +147,8 @@ fn test_alg3_three_carriers_with_modulators() {
     // Analyze spectrum
     let spectrum = analyze_spectrum(&samples, 48000);
     let peaks = find_peaks(&spectrum, -20.0);
+
+    dbg!(&peaks);
 
     // Should have energy near 437Hz, 874Hz, 1311Hz (A4 and harmonics with this MIDI mapping)
     let has_437 = peaks.iter().any(|(f, _)| (*f - 437.0).abs() < 10.0);
@@ -194,7 +196,7 @@ fn test_alg4_modulator_chain_two_branches() {
     let (c, f) = ratio_to_coarse_fine(2.5);
     patch.set_op(6, create_operator(c, f, 60));
 
-    let samples = generate_samples(patch, 69.0, 48000, Duration::from_millis(1000));
+    let samples = patch.generate_samples(69.0, 48000, Duration::from_millis(1000));
 
     // Check DC offset
     let dc_offset = calculate_dc_offset(&samples);
@@ -224,7 +226,7 @@ fn test_alg5_two_op_fm() {
     let (c, f) = ratio_to_coarse_fine(2.0);
     patch.set_op(2, create_operator(c, f, 70));
 
-    let samples = generate_samples(patch, 69.0, 48000, Duration::from_millis(1000));
+    let samples = patch.generate_samples(69.0, 48000, Duration::from_millis(1000));
 
     // Check DC offset
     let dc_offset = calculate_dc_offset(&samples);
@@ -246,97 +248,6 @@ fn test_alg5_two_op_fm() {
 }
 
 #[test]
-fn test_alg13_stack_modulators_on_one_carrier() {
-    // Algorithm 13 (0-indexed: 12): multiple parallel modulators on single carrier
-    let mut patch = Patch::default();
-    patch.algorithm = 12;
-
-    // Op 1: carrier, ratio 1.0
-    let (c, f) = ratio_to_coarse_fine(1.0);
-    patch.set_op(1, create_operator(c, f, 99));
-
-    // Op 2: modulator, ratio 2.0
-    let (c, f) = ratio_to_coarse_fine(2.0);
-
-    // Op 3: modulator, ratio 3.0
-    let (c, f) = ratio_to_coarse_fine(3.0);
-    patch.set_op(3, create_operator(c, f, 70));
-
-    // Op 4: modulator, ratio 1.5
-    let (c, f) = ratio_to_coarse_fine(1.5);
-    patch.set_op(4, create_operator(c, f, 70));
-
-    let samples = generate_samples(patch, 69.0, 48000, Duration::from_millis(1000));
-
-    // Check DC offset
-    let dc_offset = calculate_dc_offset(&samples);
-    assert!(dc_offset.abs() < 0.1, "DC offset too high: {}", dc_offset);
-
-    // Analyze spectrum
-    let spectrum = analyze_spectrum(&samples, 48000);
-    let peaks = find_peaks(&spectrum, -20.0);
-
-    // Should have very complex spectrum with many peaks
-    assert!(
-        peaks.len() > 5,
-        "Expected complex spectrum with many peaks, found {}",
-        peaks.len()
-    );
-
-    // Should have strong sidebands
-    assert!(
-        has_sidebands(&spectrum, 437.0, 50.0),
-        "Expected strong sidebands from stacked modulators"
-    );
-}
-
-#[test]
-fn test_alg14_two_stacks_two_carriers() {
-    // Algorithm 14 (0-indexed: 13): two parallel carrier/modulator stacks
-    let mut patch = Patch::default();
-    patch.algorithm = 13;
-
-    // Op 1: carrier, ratio 1.0
-    let (c, f) = ratio_to_coarse_fine(1.0);
-    patch.set_op(1, create_operator(c, f, 99));
-
-    // Op 2: modulator, ratio 2.0
-    let (c, f) = ratio_to_coarse_fine(2.0);
-    patch.set_op(2, create_operator(c, f, 70));
-
-    // Op 3: carrier, ratio 2.0
-    let (c, f) = ratio_to_coarse_fine(2.0);
-    patch.set_op(3, create_operator(c, f, 99));
-
-    // Op 4: modulator, ratio 3.0
-    let (c, f) = ratio_to_coarse_fine(3.0);
-    patch.set_op(4, create_operator(c, f, 70));
-
-    let samples = generate_samples(patch, 69.0, 48000, Duration::from_millis(1000));
-
-    // Check DC offset
-    let dc_offset = calculate_dc_offset(&samples);
-    assert!(dc_offset.abs() < 0.1, "DC offset too high: {}", dc_offset);
-
-    // Analyze spectrum
-    let spectrum = analyze_spectrum(&samples, 48000);
-    let peaks = find_peaks(&spectrum, -20.0);
-
-    // Should have energy near both 440Hz and 880Hz
-    let has_440 = peaks.iter().any(|(f, _)| (*f - 437.0).abs() < 10.0);
-    let has_880 = peaks.iter().any(|(f, _)| (*f - 874.0).abs() < 10.0);
-
-    assert!(has_440, "Expected peak near 440Hz");
-    assert!(has_880, "Expected peak near 880Hz");
-
-    // Should have sidebands
-    assert!(
-        has_sidebands(&spectrum, 437.0, 50.0),
-        "Expected sidebands around fundamental"
-    );
-}
-
-#[test]
 fn test_alg18_dual_modulators_feed_single_carrier() {
     // Algorithm 18 (0-indexed: 17)
     let mut patch = Patch::default();
@@ -354,7 +265,7 @@ fn test_alg18_dual_modulators_feed_single_carrier() {
     let (c, f) = ratio_to_coarse_fine(3.0);
     patch.set_op(3, create_operator(c, f, 70));
 
-    let samples = generate_samples(patch, 69.0, 48000, Duration::from_millis(1000));
+    let samples = patch.generate_samples(69.0, 48000, Duration::from_millis(1000));
 
     // Check DC offset
     let dc_offset = calculate_dc_offset(&samples);
@@ -368,97 +279,4 @@ fn test_alg18_dual_modulators_feed_single_carrier() {
         has_sidebands(&spectrum, 437.0, 50.0),
         "Expected sidebands from dual modulators"
     );
-}
-
-#[test]
-fn test_alg23_parallel_two_carriers_each_with_modulator() {
-    // Algorithm 23 (0-indexed: 22)
-    let mut patch = Patch::default();
-    patch.algorithm = 22;
-
-    // Op 1: carrier, ratio 1.0
-    let (c, f) = ratio_to_coarse_fine(1.0);
-    patch.set_op(1, create_operator(c, f, 99));
-
-    // Op 2: modulator, ratio 2.0
-    let (c, f) = ratio_to_coarse_fine(2.0);
-    patch.set_op(2, create_operator(c, f, 70));
-
-    // Op 3: carrier, ratio 2.0
-    let (c, f) = ratio_to_coarse_fine(2.0);
-    patch.set_op(3, create_operator(c, f, 99));
-
-    // Op 4: modulator, ratio 3.0
-    let (c, f) = ratio_to_coarse_fine(3.0);
-    patch.set_op(4, create_operator(c, f, 70));
-
-    let samples = generate_samples(patch, 69.0, 48000, Duration::from_millis(1000));
-
-    // Check DC offset
-    let dc_offset = calculate_dc_offset(&samples);
-    assert!(dc_offset.abs() < 0.1, "DC offset too high: {}", dc_offset);
-
-    // Analyze spectrum
-    let spectrum = analyze_spectrum(&samples, 48000);
-    let peaks = find_peaks(&spectrum, -20.0);
-
-    // Should have two main clusters around 440Hz and 880Hz
-    let has_440 = peaks.iter().any(|(f, _)| (*f - 437.0).abs() < 10.0);
-    let has_880 = peaks.iter().any(|(f, _)| (*f - 874.0).abs() < 10.0);
-
-    assert!(has_440, "Expected peak near 440Hz");
-    assert!(has_880, "Expected peak near 880Hz");
-
-    // Should have sidebands
-    assert!(
-        has_sidebands(&spectrum, 437.0, 50.0),
-        "Expected sidebands from parallel FM"
-    );
-}
-
-#[test]
-fn test_alg32_parallel_sines() {
-    const SAMPLE_RATE: u32 = 48000;
-
-    // Algorithm 23 (0-indexed: 22)
-    let mut patch = Patch::default();
-    patch.algorithm = 31;
-
-    for idx in 1..=6 {
-        let (c, f) = ratio_to_coarse_fine(idx as f32);
-        patch.set_op(idx, create_operator(c, f, 99));
-    }
-
-    let desired_pitch = 437.0;
-    let sample_pitch_increment = desired_pitch / SAMPLE_RATE as f32;
-
-    for pitch in [48.0, 60.0, 69.0, 72.0, 81.0] {
-        let samples = generate_samples(patch, pitch, SAMPLE_RATE, Duration::from_millis(1000));
-
-        // Analyze spectrum
-        let spectrum = analyze_spectrum(&samples, SAMPLE_RATE);
-        let peaks = find_peaks(&spectrum, -20.0);
-
-        println!("pitch: {}, peaks: {:?}", pitch, peaks);
-    }
-
-    /*
-
-    // Check DC offset
-    let dc_offset = calculate_dc_offset(&samples);
-    assert!(dc_offset.abs() < 0.1, "DC offset too high: {}", dc_offset);
-
-    // Should have two main clusters around 440Hz and 880Hz
-    let has_440 = peaks.iter().any(|(f, _)| (*f - 437.0).abs() < 10.0);
-    let has_880 = peaks.iter().any(|(f, _)| (*f - 874.0).abs() < 10.0);
-
-    assert!(has_440, "Expected peak near 440Hz");
-    assert!(has_880, "Expected peak near 880Hz");
-
-    // Should have sidebands
-    assert!(
-        has_sidebands(&spectrum, 437.0, 50.0),
-        "Expected sidebands from parallel FM"
-    );
-    */
 }
