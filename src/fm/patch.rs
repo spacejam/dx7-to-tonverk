@@ -70,12 +70,39 @@ impl PatchBank {
 }
 
 /// DX7 envelope parameters (4-stage)
-#[derive(Debug, Clone, Copy, Default)]
-pub struct Envelope {
+#[derive(Debug, Clone, Copy)]
+pub struct OpEnvelope {
     /// Rate for each of the 4 envelope stages
     pub rate: [u8; 4],
     /// Level for each of the 4 envelope stages
     pub level: [u8; 4],
+}
+
+impl Default for OpEnvelope {
+    fn default() -> OpEnvelope {
+        OpEnvelope {
+            level: [99, 99, 99, 0],
+            rate: [99, 99, 99, 99],
+        }
+    }
+}
+
+/// DX7 envelope parameters (4-stage)
+#[derive(Debug, Clone, Copy)]
+pub struct PitchEnvelope {
+    /// Rate for each of the 4 envelope stages
+    pub rate: [u8; 4],
+    /// Level for each of the 4 envelope stages
+    pub level: [u8; 4],
+}
+
+impl Default for PitchEnvelope {
+    fn default() -> PitchEnvelope {
+        PitchEnvelope {
+            level: [50, 50, 50, 50],
+            rate: [99, 99, 99, 99],
+        }
+    }
 }
 
 /// Keyboard scaling parameters
@@ -97,7 +124,7 @@ pub struct KeyboardScaling {
 #[derive(Debug, Clone, Copy, Default)]
 pub struct Operator {
     /// Amplitude envelope
-    pub envelope: Envelope,
+    pub envelope: OpEnvelope,
     /// Keyboard scaling settings
     pub keyboard_scaling: KeyboardScaling,
     /// Rate scaling (0-7)
@@ -143,7 +170,7 @@ pub struct Patch {
     /// Six operators (DX7 has 6 operators)
     pub op: [Operator; 6],
     /// Pitch envelope
-    pub pitch_envelope: Envelope,
+    pub pitch_envelope: PitchEnvelope,
     /// Algorithm number (0-31)
     pub algorithm: u8,
     /// Feedback amount (0-7)
@@ -164,8 +191,8 @@ impl Default for Patch {
     fn default() -> Self {
         Self {
             op: [Operator::default(); 6],
-            pitch_envelope: Envelope::default(),
-            algorithm: 0,
+            pitch_envelope: PitchEnvelope::default(),
+            algorithm: 31,
             feedback: 0,
             reset_phase: 0,
             modulations: ModulationParameters::default(),

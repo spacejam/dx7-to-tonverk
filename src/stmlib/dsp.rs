@@ -31,10 +31,10 @@ use super::sine_lut::LUT_SINE;
 #[inline]
 pub fn interpolate(table: &[f32], index: f32, size: f32) -> f32 {
     let index = index * size;
-    let index_integral = index as i32;
+    let index_integral = (index as usize).min(table.len() - 2);
     let index_fractional = index - index_integral as f32;
-    let a = table[index_integral as usize];
-    let b = table[(index_integral + 1) as usize];
+    let a = table[index_integral];
+    let b = table[index_integral + 1];
     a + (b - a) * index_fractional
 }
 
@@ -89,7 +89,10 @@ pub fn sine_pm(phase: u32, pm: f32) -> f32 {
     const OFFSET: f32 = MAX_INDEX as f32;
     const SCALE: f32 = MAX_UINT32 / (MAX_INDEX as f32 * 2.0);
 
-    let phase = phase.wrapping_add(((pm + OFFSET) * SCALE) as u32 * (MAX_INDEX as u32 * 2));
+    // Use wrapping arithmetic to match C++ unsigned overflow behavior
+    let phase_offset = ((pm + OFFSET) * SCALE) as u32;
+    let multiplier = (MAX_INDEX as u32).wrapping_mul(2);
+    let phase = phase.wrapping_add(phase_offset.wrapping_mul(multiplier));
 
     let integral = (phase >> (32 - SINE_LUT_BITS)) as usize;
     let fractional = (phase << SINE_LUT_BITS) as f32 / MAX_UINT32;

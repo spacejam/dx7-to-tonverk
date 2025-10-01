@@ -3,10 +3,12 @@ use std::time::Duration;
 use hound::{WavSpec, WavWriter};
 
 use dx7::fm::{
-    patch::{Patch, PatchBank},
+    patch::Patch,
     voice::{Parameters, Voice},
 };
 
+/// midi_note is based on midi note 60 correlating to C3 at 260hz. midi_note of 81 corresponds to
+/// A4 at 437hz.
 pub fn generate_samples(
     patch: Patch,
     midi_note: f32,
@@ -17,15 +19,22 @@ pub fn generate_samples(
 
     let mut buf = vec![0.0_f32; n_samples];
 
-    let parameters = Parameters::default();
+    let parameters = Parameters {
+        gate: true,
+        velocity: 1.0,
+        note: midi_note,
+        ..Parameters::default()
+    };
 
-    let mut voice = Voice::new(patch, midi_note, sample_rate as f32);
+    let mut voice = Voice::new(patch, sample_rate as f32);
 
     voice.render_temp(&parameters, &mut buf);
 
     buf
 }
 
+/// midi_note is based on midi note 60 correlating to C3 at 260hz. midi_note of 81 corresponds to
+/// A4 at 437hz.
 pub fn generate_wav(patch: Patch, midi_note: f32, sample_rate: u32, duration: Duration) -> Vec<u8> {
     let buf = generate_samples(patch, midi_note, sample_rate, duration);
 

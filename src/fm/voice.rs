@@ -94,7 +94,7 @@ pub struct Voice {
 
 impl Voice {
     /// Creates a new voice
-    pub fn new(patch: Patch, note: f32, sample_rate: f32) -> Self {
+    pub fn new(patch: Patch, sample_rate: f32) -> Self {
         let mut ret = Self {
             algorithms: Algorithms::new(),
             sample_rate,
@@ -105,7 +105,7 @@ impl Voice {
             operator_envelope: [OperatorEnvelope::new(); NUM_OPERATORS],
             pitch_envelope: PitchEnvelope::new(),
             normalized_velocity: 10.0,
-            note,
+            note: 48.0,
             ratios: [0.0; NUM_OPERATORS],
             level_headroom: [0.0; NUM_OPERATORS],
             level: [0.0; NUM_OPERATORS],
@@ -311,6 +311,6 @@ impl Voice {
 
 impl Default for Voice {
     fn default() -> Self {
-        Self::new(Patch::default(), 48.0, 44100.0)
+        Self::new(Patch::default(), 44100.0)
     }
 }
