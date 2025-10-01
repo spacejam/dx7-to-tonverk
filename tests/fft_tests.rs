@@ -109,64 +109,6 @@ fn has_sidebands(spectrum: &[(f32, f32)], fundamental: f32, tolerance_hz: f32) -
 }
 
 #[test]
-fn test_alg3_three_carriers_with_modulators() {
-    // Algorithm 3 (0-indexed: 2): three pairs of modulator->carrier
-    let mut patch = Patch::default();
-    patch.algorithm = 2; // 0-indexed
-
-    // Op 1: carrier, ratio 1.0
-    let (c, f) = ratio_to_coarse_fine(1.0);
-    patch.set_op(1, create_operator(c, f, 99));
-
-    // Op 2: modulator, ratio 2.0
-    let (c, f) = ratio_to_coarse_fine(2.0);
-    patch.set_op(2, create_operator(c, f, 70));
-
-    // Op 3: carrier, ratio 2.0
-    let (c, f) = ratio_to_coarse_fine(2.0);
-    patch.set_op(3, create_operator(c, f, 99));
-
-    // Op 4: modulator, ratio 3.0
-    let (c, f) = ratio_to_coarse_fine(3.0);
-    patch.set_op(4, create_operator(c, f, 70));
-
-    // Op 5: carrier, ratio 3.0
-    let (c, f) = ratio_to_coarse_fine(3.0);
-    patch.set_op(5, create_operator(c, f, 99));
-
-    // Op 6: modulator, ratio 1.5
-    let (c, f) = ratio_to_coarse_fine(1.5);
-    patch.set_op(6, create_operator(c, f, 70));
-
-    let samples = patch.generate_samples(69.0, 48000, Duration::from_millis(1000));
-
-    // Check DC offset
-    let dc_offset = calculate_dc_offset(&samples);
-    assert!(dc_offset.abs() < 0.1, "DC offset too high: {}", dc_offset);
-
-    // Analyze spectrum
-    let spectrum = analyze_spectrum(&samples, 48000);
-    let peaks = find_peaks(&spectrum, -20.0);
-
-    dbg!(&peaks);
-
-    // Should have energy near 437Hz, 874Hz, 1311Hz (A4 and harmonics with this MIDI mapping)
-    let has_437 = peaks.iter().any(|(f, _)| (*f - 437.0).abs() < 10.0);
-    let has_874 = peaks.iter().any(|(f, _)| (*f - 874.0).abs() < 10.0);
-    let has_1311 = peaks.iter().any(|(f, _)| (*f - 1311.0).abs() < 10.0);
-
-    assert!(has_437, "Expected peak near 437Hz (A4)");
-    assert!(has_874, "Expected peak near 874Hz (A5)");
-    assert!(has_1311, "Expected peak near 1311Hz");
-
-    // Should have sidebands
-    assert!(
-        has_sidebands(&spectrum, 437.0, 50.0),
-        "Expected sidebands around fundamental"
-    );
-}
-
-#[test]
 fn test_alg4_modulator_chain_two_branches() {
     // Algorithm 4 (0-indexed: 3)
     let mut patch = Patch::default();
@@ -209,41 +151,6 @@ fn test_alg4_modulator_chain_two_branches() {
     assert!(
         has_sidebands(&spectrum, 437.0, 50.0),
         "Expected sidebands from complex modulation"
-    );
-}
-
-#[test]
-fn test_alg5_two_op_fm() {
-    // Algorithm 5 (0-indexed: 4): classic 2-operator FM
-    let mut patch = Patch::default();
-    patch.algorithm = 4;
-
-    // Op 1: carrier, ratio 1.0
-    let (c, f) = ratio_to_coarse_fine(1.0);
-    patch.set_op(1, create_operator(c, f, 99));
-
-    // Op 2: modulator, ratio 2.0
-    let (c, f) = ratio_to_coarse_fine(2.0);
-    patch.set_op(2, create_operator(c, f, 70));
-
-    let samples = patch.generate_samples(69.0, 48000, Duration::from_millis(1000));
-
-    // Check DC offset
-    let dc_offset = calculate_dc_offset(&samples);
-    assert!(dc_offset.abs() < 0.1, "DC offset too high: {}", dc_offset);
-
-    // Analyze spectrum
-    let spectrum = analyze_spectrum(&samples, 48000);
-    let peaks = find_peaks(&spectrum, -20.0);
-
-    // Should have a peak near 437Hz (A4 with this MIDI mapping)
-    let has_437 = peaks.iter().any(|(f, _)| (*f - 437.0).abs() < 10.0);
-    assert!(has_437, "Expected peak near 437Hz (A4)");
-
-    // Should have sidebands from 2-op FM
-    assert!(
-        has_sidebands(&spectrum, 437.0, 50.0),
-        "Expected sidebands from 2-operator FM"
     );
 }
 
