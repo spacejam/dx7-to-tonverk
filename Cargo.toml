@@ -6,7 +6,7 @@ authors = ["Tyler Neely"]
 description = "Generate Elektron Tonverk multisamples from your favorite DX7 SYSEX patches"
 license = "MIT"
 repository = "https://github.com/spacejam/tv7"
-keywords = ["audio", "synthesis", "fm", "dx7", "dsp", "tonverk"]
+keywords = ["audio", "fm", "dx7", "dsp", "tonverk"]
 categories = ["multimedia::audio"]
 
 [features]
