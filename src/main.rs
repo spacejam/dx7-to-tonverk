@@ -184,5 +184,22 @@ fn tonverk_sanitize(input: &str) -> String {
         })
         .collect();
 
-    filtered.trim().to_string()
+    let trimmed = filtered.trim();
+
+    // Replace multiple contiguous spaces with a single space
+    let mut result = String::with_capacity(trimmed.len());
+    let mut prev_was_space = false;
+    for c in trimmed.chars() {
+        if c == ' ' {
+            if !prev_was_space {
+                result.push(c);
+            }
+            prev_was_space = true;
+        } else {
+            result.push(c);
+            prev_was_space = false;
+        }
+    }
+
+    result
 }
