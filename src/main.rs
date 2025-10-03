@@ -165,10 +165,12 @@ fn tonverk_sanitize(input: &str) -> String {
         'å', 'ß', 'ä', 'ö', 'ü', 'æ', 'ø', 'ç', 'ñ', 'Å', 'ẞ', 'Ä', 'Ö', 'Ü', 'Æ', 'Ø', 'Ç', 'Ñ',
     ];
 
-    input
+    let filtered: String = input
         .chars()
         .filter(|c| {
             c.is_ascii_alphanumeric() || allowed_symbols.contains(c) || allowed_letters.contains(c)
         })
-        .collect()
+        .collect();
+
+    filtered.trim().to_string()
 }
