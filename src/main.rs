@@ -52,6 +52,10 @@ enum Commands {
         /// Note increment
         #[arg(long, default_value_t = 3)]
         note_increment: u8,
+
+        /// Override output multisample name
+        #[arg(long)]
+        multisample_name: Option<String>,
     },
 }
 
@@ -80,6 +84,7 @@ fn main() {
             min_midi_note,
             max_midi_note,
             note_increment,
+            multisample_name,
         } => {
             if min_midi_note > 127 {
                 eprintln!(
@@ -122,7 +127,14 @@ fn main() {
             }
 
             let patch = patch_bank.patches[patch_number];
-            let name = tonverk_sanitize(&patch.name());
+            let name = multisample_name.unwrap_or_else(|| tonverk_sanitize(&patch.name()));
+
+            if name != tonverk_sanitize(&name) {
+                eprintln!(
+                    "Error: multisample_name contains invalid characters. Allowed: alphanumeric, ~!@#$%^&()_+-= åßäöüæøçñ"
+                );
+                std::process::exit(1);
+            }
 
             let pitches_iter = (0..)
                 .map(move |i| min_midi_note + i * note_increment)
