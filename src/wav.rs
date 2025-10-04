@@ -27,7 +27,7 @@ pub fn generate_wav(
         let peak = buf.iter().map(|s| s.abs()).fold(0.0f32, f32::max);
 
         // Normalize to -1.0 to 1.0 range if needed, with headroom
-        let normalize_factor = if peak > 0.8 { 0.8 / peak } else { 1.0 };
+        let normalize_factor = if peak > 0.5 { 0.5 / peak } else { 1.0 };
 
         for sample in &mut buf {
             *sample *= normalize_factor;
